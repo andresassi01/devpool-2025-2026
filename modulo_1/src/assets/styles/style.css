@@ -1,0 +1,43 @@
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Gilroy', 'Inter', sans-serif;
+  background-color: #ffffff;
+  color: #1a1a1a;
+  overflow-x: hidden;
+}
+
+section {
+  scroll-margin-top: 5rem; 
+}
+
+.column {
+  border: none !important;
+}
+
+
+h1, h2, h3 {
+  color: #2c3e50;
+}
+
+.button {
+    transition: transform 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+.button:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1) !important;
+}
+
+.button:active {
+    transform: translateY(-1px) !important;
+}
