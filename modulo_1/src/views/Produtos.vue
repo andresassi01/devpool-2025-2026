@@ -45,10 +45,7 @@
             <tr v-for="produto in produtosFiltrados" :key="produto.id">
               <td>{{ produto.codigo }}</td>
               <td>{{ produto.nome }}</td>
-              <td>R$ {{ produto.preco ? Number(produto.preco).toLocaleString('pt-BR', {
-                style: 'currency', currency:
-                  'BRL'
-}) : '0,00' }}</td>
+              <td>{{ Number(produto.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }}</td>
               <td>
                 <span :class="['tag', produto.situacao === 'A' ? 'is-success' : 'is-danger']">
                   {{ produto.situacao === 'A' ? 'Ativo' : 'Inativo' }}
@@ -61,6 +58,8 @@
           </tbody>
         </table>
       </div>
+
+      <Paginacao :pagina-atual="pagina" :tem-mais="temMaisPaginas" @mudar-pagina="trocarPagina" />
     </div>
   </section>
 </template>
@@ -68,16 +67,23 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import Paginacao from '../components/Paginacao.vue';
 
 const router = useRouter();
 const produtos = ref<any[]>([]);
 const carregando = ref(false);
 const erro = ref(false);
 const mensagemErro = ref('');
+const pagina = ref(1);
+const temMaisPaginas = ref(true);
 
-// Filtros Locais
 const filtroNome = ref('');
 const filtroSKU = ref('');
+
+const trocarPagina = (novaPagina: number) => {
+  pagina.value = novaPagina;
+  buscarProdutos();
+};
 
 const buscarProdutos = async () => {
   carregando.value = true;
@@ -91,49 +97,34 @@ const buscarProdutos = async () => {
   }
 
   try {
-    const resposta = await fetch('/Api/v3/produtos?pagina=1&limite=10', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    let url = `/Api/v3/produtos?pagina=${pagina.value}&limite=10`;
 
-    if (resposta.status === 401) {
-      throw new Error('Token expirado ou inválido. Faça login novamente.');
-    }
+    if (filtroNome.value) url += `&nome=${encodeURIComponent(filtroNome.value)}`;
+    if (filtroSKU.value) url += `&codigo=${encodeURIComponent(filtroSKU.value)}`;
+
+    const resposta = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
 
     const dados = await resposta.json();
 
     if (resposta.ok) {
       produtos.value = dados.data || [];
+      temMaisPaginas.value = produtos.value.length === 10;
     } else {
-      throw new Error(dados.error?.description || 'Erro ao buscar produtos.');
+      throw new Error(dados.error?.description || 'Erro ao buscar produtos');
     }
-
   } catch (err: any) {
     erro.value = true;
     mensagemErro.value = err.message;
-
-    produtos.value = [
-      { id: 101, codigo: 'DEV-001', nome: 'Camiseta DevPool V3', preco: 79.90, situacao: 'A' },
-      { id: 102, codigo: 'VUE-321', nome: 'Caneca Vue.js Framework', preco: 35.00, situacao: 'A' },
-      { id: 103, codigo: 'ERR-404', nome: 'Mousepad Bug Hunter', preco: 50.00, situacao: 'I' }
-    ];
-    if (err.message.includes('Token')) {
-      localStorage.removeItem('bling_access_token');
-      setTimeout(() => router.push('/'), 3000);
-    }
   } finally {
     carregando.value = false;
   }
 };
 
 const produtosFiltrados = computed(() => {
-  return produtos.value.filter(p => {
-    const matchNome = filtroNome.value ? p.nome.toLowerCase().includes(filtroNome.value.toLowerCase()) : true;
-    const matchSKU = filtroSKU.value ? String(p.codigo).toLowerCase().includes(filtroSKU.value.toLowerCase()) : true;
-    return matchNome && matchSKU;
-  });
+  return produtos.value;
 });
 
 onMounted(buscarProdutos);
