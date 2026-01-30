@@ -1,9 +1,10 @@
 <template>
+  <BarraDeNavegacao />
   <section class="section">
     <div class="container">
       
       <h1 class="title mb-5">Gestão de Produtos</h1>
-
+      
       <FiltroProdutos 
         :is-loading="carregando" 
         @pesquisar="handlePesquisa" 
@@ -55,6 +56,7 @@ import FiltroProdutos from '../components/FiltroProdutos.vue';
 import AcoesProdutos from '../components/AcoesProdutos.vue';
 import ListagemProdutos from '../components/ListagemProdutos.vue';
 import FeedbackNotificacao from '../components/FeedbackNotificacao.vue';
+import BarraDeNavegacao from '../layout/BarraDeNavegacao.vue';
 
 interface Produto {
   id: number;
@@ -187,6 +189,12 @@ const buscarProdutos = async () => {
       produtos.value = dados.data || [];
       temMaisPaginas.value = produtos.value.length === LIMITE_POR_PAGINA;
     } else {
+      if (resposta.status === 401) {
+        localStorage.removeItem('bling_access_token');
+        router.push('/');
+        return;
+      }
+
       if (resposta.status === 404) {
         produtos.value = [];
         temMaisPaginas.value = false;
@@ -207,9 +215,11 @@ const buscarProdutos = async () => {
 onMounted(() => {
   buscarProdutos();
   window.addEventListener('click', fecharDropdownExterno);
+  window.scrollTo(0, 0);
 });
 
 onUnmounted(() => {
   window.removeEventListener('click', fecharDropdownExterno);
 });
 </script>
+
