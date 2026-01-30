@@ -1,30 +1,38 @@
 <template>
-  <nav class="navbar is-fixed-top" role="navigation" aria-label="main navigation">
+  <nav class="navbar is-fixed-top">
     <div class="container">
       <div class="navbar-brand">
-        <a class="navbar-item logo-container" href="#">
-          <img class="logo-custom" src="../assets/images/logo.png" alt="Logo">
-        </a>
-
-        <a role="button" class="navbar-burger" :class="{ 'is-active': menuAtivo }" @click="menuAtivo = !menuAtivo">
-          <span aria-hidden="true"></span>
-          <span aria-hidden="true"></span>
-          <span aria-hidden="true"></span>
-        </a>
+        <router-link class="navbar-item" to="/">
+          <img src="../assets/images/logo.png" alt="Logo">
+        </router-link>
       </div>
 
       <div class="navbar-menu" :class="{ 'is-active': menuAtivo }">
         <div class="navbar-end">
-          <a class="navbar-item nav-link" href="#inicio">Início</a>
-          <a class="navbar-item nav-link" href="#funcionalidades">Funcionalidades</a>
-          <a class="navbar-item nav-link" href="#planos">Planos</a>
-          <a class="navbar-item nav-link" href="#contato">Contato</a>
-          
+          <template v-if="route.path === '/'">
+            <a class="navbar-item nav-link" href="#inicio">Início</a>
+            <a class="navbar-item nav-link" href="#funcionalidades">Funcionalidades</a>
+            <a class="navbar-item nav-link" href="#planos">Planos</a>
+            <a class="navbar-item nav-link" href="#contato">Contato</a>
+          </template>
           <div class="navbar-item">
             <div class="buttons">
-              <a class="button is-dark is-rounded" @click="iniciarLogin">
+              <a v-if="!token" class="button is-dark is-rounded" @click="iniciarLogin">
                 <strong>ENTRAR</strong>
               </a>
+
+              <div v-else class="navbar-item has-dropdown is-hoverable container-conta">
+                <a class="nav-link label-conta">
+                  <i class="fas fa-user-circle mr-2"></i>
+                  <span>Minha Conta</span>
+                </a>
+
+                <div class="navbar-dropdown is-right">
+                  <router-link class="navbar-item" to="/produtos">Painel de Produtos</router-link>
+                  <hr class="navbar-divider">
+                  <a class="navbar-item has-text-danger" @click="logout">Sair</a>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -34,21 +42,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { loginNoBling } from '../services/auth';
 
+const route = useRoute();
+const router = useRouter();
 const menuAtivo = ref(false);
+const token = ref(localStorage.getItem('bling_access_token'));
 
-const iniciarLogin = () => {
-  loginNoBling();
+const atualizarStatusSessao = () => {
+  token.value = localStorage.getItem('bling_access_token');
 };
 
+watch(() => route.path, () => {
+  atualizarStatusSessao();
+  menuAtivo.value = false;
+});
+
+onMounted(atualizarStatusSessao);
+
+const iniciarLogin = () => loginNoBling();
+
+const logout = () => {
+  localStorage.removeItem('bling_access_token');
+  token.value = null;
+  router.push('/');
+};
 </script>
 
 <style scoped>
 .navbar {
-  min-height: 80px; 
-  box-shadow: 0 2px 15px rgba(0,0,0,0.05);
+  min-height: 80px;
+  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
   display: flex;
   align-items: center;
   background-color: white;
@@ -75,7 +101,7 @@ const iniciarLogin = () => {
   height: 2px;
   bottom: 5px;
   left: 50%;
-  background-color: #2ecc71; 
+  background-color: #2ecc71;
   transition: all 0.3s ease;
   transform: translateX(-50%);
 }
@@ -83,15 +109,54 @@ const iniciarLogin = () => {
 .nav-link:hover::after {
   width: 60%;
 }
+
 .logo-custom {
-  max-height: 4rem !important; 
+  max-height: 4rem !important;
   height: auto;
   width: auto;
 }
 
-
 .navbar-item img {
   max-height: 2.5rem;
+}
+
+.navbar-dropdown {
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-dropdown .navbar-item {
+  padding: 0.7rem 1.5rem;
+  font-size: 0.95rem;
+  transition: background 0.2s ease;
+}
+
+.navbar-dropdown .navbar-item:hover {
+  background-color: #f5f5f5;
+}
+
+.container-conta {
+  padding: 0 !important;
+  height: 80px;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.label-conta {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center;
+  height: 100%;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 1 !important;
+}
+
+.label-conta i {
+  font-size: 1.2rem;
+  display: inline-block;
+  vertical-align: middle;
+  margin-top: -2px;
 }
 
 @media screen and (max-width: 1023px) {
