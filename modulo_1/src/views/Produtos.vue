@@ -5,7 +5,7 @@
 
       <h1 class="title mb-5">Gestão de Produtos</h1>
 
-      <FiltroProdutos :is-loading="carregando" @pesquisar="handlePesquisa" @limpar="handleLimpar" />
+      <FiltroProdutos :is-loading="carregando" :filtros-pai="filtrosAtivos" @pesquisar="handlePesquisa" @limpar="handleLimpar" />
 
       <AcoesProdutos :quantidade-selecionados="produtosSelecionados.length" @excluir-massa="prepararExclusaoMassa"
         @incluir="irParaInclusao" />
@@ -120,6 +120,7 @@ const handleLimpar = () => {
   Object.assign(filtrosAtivos, filtrosIniciais);
   pagina.value = 1;
   produtosSelecionados.value = [];
+  sessionStorage.removeItem('ultimo_estado_filtro');
   buscarProdutos();
 };
 
@@ -189,6 +190,11 @@ const buscarProdutos = async () => {
   } finally {
     carregando.value = false;
   }
+  sessionStorage.setItem('ultimo_estado_filtro', JSON.stringify({
+    filtros: filtrosAtivos,
+    pagina: pagina.value
+  }));
+
 };
 
 const mensagemModal = computed(() => {
@@ -309,9 +315,21 @@ const executarExclusaoEmMassa = async () => {
 
 
 onMounted(() => {
-  buscarProdutos();
   window.addEventListener('click', fecharDropdownExterno);
   window.scrollTo(0, 0);
+
+  const estadoSalvo = sessionStorage.getItem('ultimo_estado_filtro');
+  if (estadoSalvo) {
+    try{
+    const { filtros, pagina: paginaSalva } = JSON.parse(estadoSalvo);
+    Object.assign(filtrosAtivos, filtros); 
+    pagina.value = paginaSalva || 1; 
+  } catch (e) {
+      sessionStorage.removeItem('ultimo_estado_filtro');
+    }
+  } 
+
+  buscarProdutos();
 });
 
 onUnmounted(() => {

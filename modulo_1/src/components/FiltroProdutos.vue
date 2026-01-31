@@ -78,7 +78,8 @@
 import { reactive, watch, ref } from 'vue';
 
 const props = defineProps({
-  isLoading: Boolean
+  isLoading: Boolean,
+  filtrosPai: Object
 });
 
 const emit = defineEmits(['pesquisar', 'limpar']);
@@ -92,7 +93,12 @@ const filtros = reactive({
   situacao: '1'
 });
 
-// Impede que o usuário selecione um período impossível (Data Início > Data Fim)
+watch(() => props.filtrosPai, (novoEstado) => {
+  if (novoEstado) {
+    Object.assign(filtros, novoEstado);
+  }
+}, { immediate: true, deep: true });
+
 watch(() => filtros.dataInicio, (novaDataInicio) => {
   if (novaDataInicio && filtros.dataFim && new Date(novaDataInicio) > new Date(filtros.dataFim)) {
     filtros.dataFim = novaDataInicio;

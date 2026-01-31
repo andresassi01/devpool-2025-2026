@@ -273,6 +273,7 @@ const salvarProduto = async () => {
 
     notificar(`Produto ${emEdicao.value ? 'atualizado' : 'cadastrado'} com sucesso!`, 'sucesso');
     setTimeout(() => router.push('/produtos'), 1500);
+    sessionStorage.removeItem('ultimo_estado_filtro');
 
   } catch (err: any) {
     const mensagemFinal = err.message || "Erro inesperado (mensagem vazia).";

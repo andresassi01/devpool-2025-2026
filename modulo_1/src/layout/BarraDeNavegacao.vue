@@ -67,6 +67,7 @@ const iniciarLogin = () => loginNoBling();
 const logout = () => {
   localStorage.removeItem('bling_access_token');
   localStorage.removeItem('bling_token_expires');
+  sessionStorage.removeItem('ultimo_estado_filtro');
   token.value = false;
   router.push('/');
 };
