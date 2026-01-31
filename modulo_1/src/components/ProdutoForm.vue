@@ -104,6 +104,7 @@
                     <select v-model="produto.situacao" required>
                       <option value="A">Ativo</option>
                       <option value="I">Inativo</option>
+                      <option value="E" disabled>Excluído</option>
                     </select>
                   </div>
                 </div>
