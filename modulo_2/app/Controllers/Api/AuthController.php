@@ -6,7 +6,7 @@ use App\Core\Controller;
 
 class AuthController extends Controller
 {
-    // Esta é a função que o Callback.vue vai chamar
+    // Esta é a função que o Callback.vue (Front) vai chamar
     public function blingToken()
     {
         $this->validateRequestMethods(['POST']);
@@ -34,7 +34,7 @@ class AuthController extends Controller
 
         $response = curl_exec($ch);
         $dataToken = json_decode($response, true);
-        curl_close($ch);
+        
 
         if (isset($dataToken['access_token'])) {
             $accessToken = $dataToken['access_token'];

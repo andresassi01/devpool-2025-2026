@@ -1,4 +1,5 @@
 <?php
+
 date_default_timezone_set('America/Belem');
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Credentials: true");
@@ -24,3 +25,4 @@ require_once __DIR__."/vendor/autoload.php";
 
 $core = new Core;
 $core->run();
+
