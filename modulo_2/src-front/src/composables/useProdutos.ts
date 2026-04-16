@@ -57,13 +57,6 @@ export function useProdutos() {
         erro.value = false;
         dropdownAberto.value = null;
 
-        // O front-end usa o token salvo no storage para produtos
-        const token = localStorage.getItem('bling_access_token');
-        if (!token) {
-            router.push('/');
-            return;
-        }
-
         try {
             const params = new URLSearchParams({
                 pagina: pagina.value.toString(),
@@ -76,32 +69,28 @@ export function useProdutos() {
             if (filtrosAtivos.dataInicio) params.append('dataAlteracaoInicial', filtrosAtivos.dataInicio);
             if (filtrosAtivos.dataFim) params.append('dataAlteracaoFinal', filtrosAtivos.dataFim);
 
-            // Chamada direta para o Bling
-            const resposta = await fetch(`https://www.bling.com.br/Api/v3/produtos?${params.toString()}`, {
+            const resposta = await fetch('http://localhost:88/index.php/api/produtos/index?' + params.toString(), {
                 method: 'GET',
-                headers: { 
+                headers: {
                     'Accept': 'application/json'
                 },
                 credentials: 'include'
             });
-
             const dados = await resposta.json();
 
             if (resposta.ok) {
                 produtos.value = dados.data || [];
                 temMaisPaginas.value = produtos.value.length === LIMITE_POR_PAGINA;
             } else if (resposta.status === 401) {
-                localStorage.removeItem('bling_access_token');
                 router.push('/');
             } else if (resposta.status === 404) {
                 produtos.value = [];
                 temMaisPaginas.value = false;
             } else {
-                throw new Error(dados.error?.description || 'Erro ao buscar produtos');
+                throw new Error(dados.message || 'Erro ao buscar produtos');
             }
         } catch (err: any) {
             erro.value = true;
-           // mensagemErro.value = err.message;
             console.error("Erro na busca de produtos:", err.message);
             produtos.value = [];
             temMaisPaginas.value = false;
@@ -115,19 +104,18 @@ export function useProdutos() {
     };
 
     const executarAlteracaoSituacao = async (id: number | null, novaSituacao: 'A' | 'E', emMassa = false) => {
-        const token = localStorage.getItem('bling_access_token');
-        if (!token) return;
-
         carregando.value = true;
         const ids = emMassa ? [...produtosSelecionados.value] : [id];
 
         try {
+            const token = localStorage.getItem('bling_access_token');
+
             const promises = ids.map(idAtual =>
                 fetch(`https://www.bling.com.br/Api/v3/produtos/${idAtual}/situacoes`, {
                     method: 'PATCH',
-                    headers: { 
+                    headers: {
                         'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json' 
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ situacao: novaSituacao })
                 })
@@ -141,6 +129,7 @@ export function useProdutos() {
 
             modalAtivo.value = false;
             produtosSelecionados.value = [];
+
             produtos.value = produtos.value.filter(p => !ids.includes(p.id));
             await buscarProdutos();
 
@@ -152,6 +141,7 @@ export function useProdutos() {
             carregando.value = false;
         }
     };
+
 
     const handlePesquisa = (novosFiltros: any) => {
         Object.assign(filtrosAtivos, novosFiltros);
