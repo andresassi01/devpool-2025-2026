@@ -3,8 +3,8 @@ import Callback from '../views/Callback.vue'
 import Landingpage from '../views/LandingPage.vue'
 import Produtos from '../views/Produtos.vue'
 import ProdutoForm from '../components/ProdutoForm.vue'
-// Importar aqui a sua futura View de Vendas
-// import Vendas from '../views/Vendas.vue' 
+import VendaForm from '../components/VendaForm.vue'
+
 
 const routes = [
   {
@@ -41,6 +41,11 @@ const routes = [
     name: 'vendas',
     component: () => import('../views/Vendas.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/vendas/novo',
+    name: 'VendaForm',
+    component: VendaForm
   }
   
 ]

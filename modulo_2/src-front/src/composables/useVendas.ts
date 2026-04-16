@@ -1,6 +1,5 @@
 import { ref } from 'vue';
 
-// Definindo a interface baseada na tabela MySQL
 interface Venda {
   id: number;
   numero: string;
@@ -11,7 +10,6 @@ interface Venda {
 }
 
 export function useVendas() {
-  // Agora dizemos que vendas é um array do tipo Venda
   const vendas = ref<Venda[]>([]);
   const loading = ref(false);
 
@@ -19,26 +17,42 @@ export function useVendas() {
     cliente: '',
     dataInicio: '',
     dataFim: '',
-    ordem: 'dataVenda'
+    ordem: 'dataVenda' 
   });
 
   const buscarVendas = async () => {
     loading.value = true;
     try {
       const params = new URLSearchParams(filtros.value).toString();
-      const response = await fetch(`http://localhost:88/api/vendas?${params}`, {
+      
+      const response = await fetch(`http://localhost:88/index.php/api/vendas?${params}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        },
         credentials: 'include'
       });
+
+      if (!response.ok) {
+        throw new Error(`Erro no servidor: ${response.status}`);
+      }
+
       const dados = await response.json();
 
-      // O TS agora aceita atribuir os dados porque definimos o tipo no ref
       vendas.value = dados.data || [];
+
     } catch (error) {
-      console.error("Erro ao buscar vendas:", error);
+      console.error("Erro ao buscar vendas no banco local:", error);
+      vendas.value = [];
     } finally {
       loading.value = false;
     }
   };
 
-  return { vendas, loading, filtros, buscarVendas };
+  return { 
+    vendas, 
+    loading, 
+    filtros, 
+    buscarVendas 
+  };
 }
