@@ -29,6 +29,7 @@
 
                 <div class="navbar-dropdown is-right">
                   <router-link class="navbar-item" to="/produtos">Painel de Produtos</router-link>
+                  <router-link class="navbar-item" to="/vendas">Minhas Vendas</router-link>
                   <hr class="navbar-divider">
                   <a class="navbar-item has-text-danger" @click="logout">Sair</a>
                 </div>

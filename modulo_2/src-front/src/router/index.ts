@@ -5,7 +5,6 @@ import Produtos from '../views/Produtos.vue'
 import ProdutoForm from '../components/ProdutoForm.vue'
 import VendaForm from '../components/VendaForm.vue'
 
-
 const routes = [
   {
     path: '/',
@@ -21,7 +20,7 @@ const routes = [
     path: '/produtos',
     name: 'produtos',
     component: Produtos,
-    meta: { requiresAuth: true } // Marca que precisa de login
+    meta: { requiresAuth: true }
   },
   {
     path: '/produtos/novo',
@@ -45,9 +44,9 @@ const routes = [
   {
     path: '/vendas/novo',
     name: 'VendaForm',
-    component: VendaForm
+    component: VendaForm,
+    meta: { requiresAuth: true }
   }
-  
 ]
 
 const router = createRouter({
@@ -55,12 +54,28 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, _, next) => {
-  const token = localStorage.getItem('bling_access_token');
+router.beforeEach(async (to, _, next) => {
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
 
-  // Verifica se a rota destino tem a marcação de 'requiresAuth'
-  if (to.matched.some(record => record.meta.requiresAuth) && !token) {
-    next({ name: 'home' });
+  if (requiresAuth) {
+    try {
+      // Fazemos uma chamada rápida ao backend para validar o COOKIE
+      const response = await fetch('http://localhost:88/index.php/api/auth/check', {
+        method: 'GET',
+        credentials: 'include' // OBRIGATÓRIO para enviar o cookie
+      });
+
+      if (response.ok) {
+        next(); // Cookie existe e é válido
+      } else {
+        // Se o PHP retornar 401 ou 403, limpamos o storage por garantia e barramos
+        localStorage.removeItem('bling_access_token');
+        next({ name: 'home' });
+      }
+    } catch (error) {
+      console.error("Erro na validação de sessão:", error);
+      next({ name: 'home' });
+    }
   } else {
     next();
   }
