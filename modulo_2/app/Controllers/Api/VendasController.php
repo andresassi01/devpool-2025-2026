@@ -11,11 +11,26 @@ class VendasController extends Controller
     public function index()
     {
         try {
+            // Capturar parâmetros
             $cliente = $_GET['cliente'] ?? null;
             $dataInicio = $_GET['dataInicio'] ?? null;
             $dataFim = $_GET['dataFim'] ?? null;
             $ordem = $_GET['ordem'] ?? 'dataVenda';
 
+            // Paginação
+            $pagina = isset($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+            $limite = 10;
+            $offset = ($pagina - 1) * $limite;
+
+            // Validação de Datas
+            if (($dataInicio && !$dataFim) || (!$dataInicio && $dataFim)) {
+                return $this->jsonResponse(null, 'Informe o período completo (Início e Fim) para filtrar por data.', 400);
+            }
+            if ($dataInicio && $dataFim && strtotime($dataInicio) > strtotime($dataFim)) {
+                return $this->jsonResponse(null, 'A data inicial não pode ser maior que a data final.', 400);
+            }
+
+            // Montar a SQL
             $sql = "SELECT id, numero, nomeCliente, dataVenda, totalComDesconto, situacao FROM vendas WHERE 1=1";
             $params = [];
 
@@ -32,12 +47,22 @@ class VendasController extends Controller
 
             $colunasPermitidas = ['dataVenda', 'totalComDesconto', 'nomeCliente'];
             $colunaOrdem = in_array($ordem, $colunasPermitidas) ? $ordem : 'dataVenda';
-            $sql .= " ORDER BY $colunaOrdem DESC";
+            $sql .= " ORDER BY $colunaOrdem DESC, id DESC";
+
+            // Adicionar Paginação na SQL 
+            $sql .= " LIMIT $limite OFFSET $offset";
 
             $db = new Venda();
             $vendas = $db->query($sql, $params);
 
-            return $this->jsonResponse($vendas, 'Sucesso');
+            // Lógica para o botão "Próximo" do Vue
+            $temMais = count($vendas) === $limite;
+
+            return $this->jsonResponse([
+                'data' => $vendas,
+                'temMais' => $temMais,
+                'pagina' => $pagina
+            ], 'Sucesso');
         } catch (\Exception $e) {
             return $this->jsonResponse(null, 'Erro ao buscar vendas: ' . $e->getMessage(), 500);
         }
@@ -64,7 +89,7 @@ class VendasController extends Controller
 
         try {
             $vendaModel = new Venda();
-            
+
             $dadosVenda = [
                 'numero' => $data['numero'] ?? null,
                 'nomeCliente' => $data['nomeCliente'],
@@ -105,7 +130,7 @@ class VendasController extends Controller
             "Authorization: Bearer {$accessToken}",
             "Accept: application/json"
         ]);
-        
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
@@ -113,14 +138,14 @@ class VendasController extends Controller
         $dados = json_decode($response, true);
 
         if ($httpCode === 200) {
-            $formatados = array_map(function($item) {
+            $formatados = array_map(function ($item) {
                 return [
                     'id' => $item['id'],
                     'nome' => $item['nome'],
                     'preco' => $item['preco']
                 ];
             }, $dados['data'] ?? []);
-            
+
             return $this->jsonResponse($formatados, 'Sucesso');
         }
 
