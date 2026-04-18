@@ -50,40 +50,67 @@ import { loginNoBling } from '../services/auth';
 const route = useRoute();
 const router = useRouter();
 const menuAtivo = ref(false);
-
-// 1. Mudamos para armazenar o valor do token (ou null)
 const token = ref<string | null>(null);
 
 const atualizarStatusSessao = () => {
-  // 2. Agora verificamos o token real exigido pelo requisito R3
   token.value = localStorage.getItem('bling_access_token');
 };
+
+// Função para limpar o estado local sem precisar chamar o logout do servidor de novo
+const limparSessaoLocal = () => {
+  localStorage.removeItem('bling_access_token');
+  localStorage.removeItem('usuario_logado');
+  token.value = null;
+  
+  // Se o usuário estiver em uma página que exige login, redireciona para a home
+  if (route.meta.requiresAuth) {
+    router.push('/');
+  }
+};
+
+onMounted(async () => {
+  // 1. Checagem imediata pelo LocalStorage (visual rápido)
+  atualizarStatusSessao();
+
+  // 2. Validação Real (Sincronização com o Cookie do Backend)
+  if (token.value) {
+    try {
+      const response = await fetch('http://localhost:88/api/auth/check', {
+        method: 'GET',
+        credentials: 'include' // Obrigatório para enviar o cookie HttpOnly
+      });
+
+      if (!response.ok) {
+        // Se o PHP retornar 401 ou erro, o cookie expirou.
+        limparSessaoLocal();
+      }
+    } catch (error) {
+      console.error("Erro ao validar sessão no carregamento:", error);
+    }
+  }
+});
 
 watch(() => route.path, () => {
   atualizarStatusSessao();
   menuAtivo.value = false;
 });
 
-onMounted(atualizarStatusSessao);
-
 const iniciarLogin = () => loginNoBling();
 
-const logout = () => {
-  // 3. Limpamos o token real do storage
-  localStorage.removeItem('bling_access_token');
-  
-  // Opcional: manter a flag antiga se você ainda a usa em outros lugares, 
-  // mas o padrão agora é o token.
-  localStorage.removeItem('usuario_logado');
-
-  // 4. Chamada para o PHP limpar o Cookie HttpOnly
-  fetch('http://localhost:88/api/auth/logout', { 
-    method: 'POST',
-    credentials: 'include' // Essencial para o PHP saber qual cookie limpar
-  });
-
-  token.value = null;
-  router.push('/');
+const logout = async () => {
+  try {
+    // 1. Avisa o PHP para deletar o cookie
+    await fetch('http://localhost:88/api/auth/logout', { 
+      method: 'POST',
+      credentials: 'include'
+    });
+  } catch (e) {
+    console.error("Erro ao avisar servidor do logout:", e);
+  } finally {
+    // 2. Limpa o front independente do sucesso da rede
+    limparSessaoLocal();
+    router.push('/');
+  }
 };
 </script>
 
