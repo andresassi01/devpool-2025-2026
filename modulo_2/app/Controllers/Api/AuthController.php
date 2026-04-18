@@ -34,7 +34,7 @@ class AuthController extends Controller
 
         $response = curl_exec($ch);
         $dataToken = json_decode($response, true);
-        
+
 
         if (isset($dataToken['access_token'])) {
             $accessToken = $dataToken['access_token'];
@@ -60,10 +60,26 @@ class AuthController extends Controller
     public function logout()
     {
         $this->validateRequestMethods(['POST']);
-        
+
         // Limpa o cookie
         setcookie('bling_token', '', time() - 3600, '/');
-        
+
         return $this->jsonResponse([], 'Logout efetuado com sucesso', 200);
+    }
+    public function check()
+    {
+        $this->validateRequestMethods(['GET']);
+
+        // Verifica se o navegador enviou o cookie que setamos no blingToken()
+        if (isset($_COOKIE['bling_token'])) {
+            return $this->jsonResponse([
+                'logado' => true
+            ], 'Sessão ativa');
+        }
+
+        // Se não tiver o cookie, retorna 401 para o Vue Router barrar a entrada
+        return $this->jsonResponse([
+            'logado' => false
+        ], 'Sessão expirada ou inexistente', 401);
     }
 }
