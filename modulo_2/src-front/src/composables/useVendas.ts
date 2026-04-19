@@ -68,11 +68,42 @@ export function useVendas() {
     buscarVendas();
   };
 
+  const aplicarFiltros = () => {
+    vendas.value.pagina = 1; // Sempre volta para a página 1 em nova busca
+    buscarVendas();
+  };
+
+  const excluirVenda = async (id: number) => {
+    if (!confirm('Tem certeza que deseja excluir esta venda?')) return;
+
+    loading.value = true;
+    try {
+      const response = await fetch(`http://localhost:88/index.php/api/vendas/destroy?id=${id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        // Atualiza a lista localmente para não precisar recarregar tudo
+        vendas.value.data = vendas.value.data.filter(v => v.id !== id);
+        alert('Venda excluída com sucesso!');
+      } else {
+        alert('Erro ao excluir venda.');
+      }
+    } catch (error) {
+      console.error("Erro:", error);
+    } finally {
+      loading.value = false;
+    }
+  };
+
   return {
     vendas,
     loading,
     filtros,
     buscarVendas,
-    trocarPagina
+    trocarPagina,
+    aplicarFiltros,
+    excluirVenda
   };
 }

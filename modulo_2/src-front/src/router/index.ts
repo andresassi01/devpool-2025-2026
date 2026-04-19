@@ -46,6 +46,13 @@ const routes = [
     name: 'VendaForm',
     component: VendaForm,
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/vendas/editar/:id',
+    name: 'vendaeditar',
+    component: VendaForm, 
+    props: true, 
+    meta: { requiresAuth: true }
   }
 ]
 
