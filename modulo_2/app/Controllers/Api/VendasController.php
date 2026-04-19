@@ -21,6 +21,7 @@ class VendasController extends Controller
             $pagina = isset($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
             $limite = 10;
             $offset = ($pagina - 1) * $limite;
+            $limiteParaCheck = $limite + 1;
 
             // Validação de Datas
             if (($dataInicio && !$dataFim) || (!$dataInicio && $dataFim)) {
@@ -50,13 +51,17 @@ class VendasController extends Controller
             $sql .= " ORDER BY $colunaOrdem DESC, id DESC";
 
             // Adicionar Paginação na SQL 
-            $sql .= " LIMIT $limite OFFSET $offset";
+            $sql .= " LIMIT $limiteParaCheck OFFSET $offset";
 
             $db = new Venda();
             $vendas = $db->query($sql, $params);
 
             // Lógica para o botão "Próximo" do Vue
-            $temMais = count($vendas) === $limite;
+            $temMais = count($vendas) > $limite;
+
+            if ($temMais) {
+                array_pop($vendas);
+            }
 
             return $this->jsonResponse([
                 'data' => $vendas,
@@ -78,12 +83,20 @@ class VendasController extends Controller
             return $this->jsonResponse([], 'Dados incompletos: Nome do cliente e itens são obrigatórios.', 400);
         }
 
+
+
+        $descontoPercentual = (float)($data['percentualDesconto'] ?? 0);
+
+        if ($descontoPercentual < 0) {
+            $descontoPercentual = 0;
+        } elseif ($descontoPercentual > 100) {
+            $descontoPercentual = 100;
+        }
+
         $subtotal = 0;
         foreach ($data['itens'] as $item) {
             $subtotal += ($item['quantidade'] * $item['precoUnitario']);
         }
-
-        $descontoPercentual = (float)($data['percentualDesconto'] ?? 0);
         $valorDesconto = $subtotal * ($descontoPercentual / 100);
         $totalFinal = $subtotal - $valorDesconto;
 
@@ -150,5 +163,46 @@ class VendasController extends Controller
         }
 
         return $this->jsonResponse([], 'Erro ao buscar no Bling', $httpCode);
+    }
+
+    public function show($id)
+    {
+        try {
+            $vendaModel = new Venda();
+            // Busca a venda
+            $venda = $vendaModel->query("SELECT * FROM vendas WHERE id = :id", ['id' => $id]);
+
+            if (!$venda) {
+                return $this->jsonResponse(null, 'Venda não encontrada', 404);
+            }
+
+            // Busca os itens da venda
+            $itens = $vendaModel->query("SELECT * FROM vendas_item WHERE venda_id = :id", ['id' => $id]);
+
+            return $this->jsonResponse([
+                'venda' => $venda[0],
+                'itens' => $itens
+            ], 'Sucesso');
+        } catch (\Exception $e) {
+            return $this->jsonResponse(null, $e->getMessage(), 500);
+        }
+    }
+
+    public function destroy()
+    {
+        // Tenta pegar o ID de onde ele estiver vindo
+        $id = $_GET['id'] ?? null;
+
+        if (!$id) {
+            return $this->jsonResponse(null, 'ID não encontrado', 400);
+        }
+
+        try {
+            $model = new Venda();
+            $model->excluirVendaCompleta($id);
+            return $this->jsonResponse(null, 'Venda removida com sucesso!', 200);
+        } catch (\Exception $e) {
+            return $this->jsonResponse(null, 'Erro no banco: ' . $e->getMessage(), 500);
+        }
     }
 }
