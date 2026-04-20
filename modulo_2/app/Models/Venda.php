@@ -13,51 +13,134 @@ class Venda extends Model
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 
-    public function salvarVendaCompleta($dadosVenda, $itens)
+    /**
+     * RN14 e RN19: Recalcula os valores no servidor para garantir a integridade.
+     */
+    private function calcularTotais($dadosVenda, $itens)
     {
+        $subtotal = 0;
+        foreach ($itens as $item) {
+            $preco = (float)($item['precoUnitario'] ?? 0);
+            $quantidade = (int)($item['quantidade'] ?? 0);
+            $subtotal += $quantidade * $preco;
+        }
+
+        $percentualDesconto = (float)($dadosVenda['percentualDesconto'] ?? 0);
+        $valorDesconto = $subtotal * ($percentualDesconto / 100);
+        $totalComDesconto = $subtotal - $valorDesconto;
+
+        return [
+            'subtotal' => $subtotal,
+            'valorDesconto' => $valorDesconto,
+            'totalComDesconto' => $totalComDesconto
+        ];
+    }
+
+    public function salvarVendaCompleta(array $dadosVenda, array $itens)
+    {
+        // RN17 - Trava de segurança
+        if (empty($itens)) {
+            throw new \Exception("A venda deve conter pelo menos um item.");
+        }
+
+        $this->db->beginTransaction();
+
         try {
-            $this->db->beginTransaction();
+            $totais = $this->calcularTotais($dadosVenda, $itens);
 
-            $sql = "INSERT INTO vendas (numero, nomeCliente, dataVenda, subtotal, valorDesconto, percentualDesconto, totalComDesconto, situacao) 
-                    VALUES (:numero, :nome, :data, :sub, :val_desc, :perc_desc, :total, :situ)";
+            $sqlVenda = "INSERT INTO vendas (nomeCliente, dataVenda, percentualDesconto, subtotal, valorDesconto, totalComDesconto) 
+                         VALUES (:nome, :data, :desconto, :subtotal, :v_desc, :total)";
 
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute([
-                ':numero'   => $dadosVenda['numero'] ?? null,
+            $stmtVenda = $this->db->prepare($sqlVenda);
+            $stmtVenda->execute([
                 ':nome'     => $dadosVenda['nomeCliente'],
                 ':data'     => $dadosVenda['dataVenda'],
-                ':sub'      => $dadosVenda['subtotal'],
-                ':val_desc' => $dadosVenda['valorDesconto'] ?? 0,
-                ':perc_desc' => $dadosVenda['percentualDesconto'] ?? 0,
-                ':total'    => $dadosVenda['totalComDesconto'],
-                ':situ'     => $dadosVenda['situacao'] ?? 'Em aberto'
+                ':desconto' => $dadosVenda['percentualDesconto'],
+                ':subtotal' => $totais['subtotal'],
+                ':v_desc'   => $totais['valorDesconto'],
+                ':total'    => $totais['totalComDesconto']
             ]);
 
             $vendaId = $this->db->lastInsertId();
 
-            if (empty($dadosVenda['numero'])) {
-                $this->db->prepare("UPDATE vendas SET numero = :id WHERE id = :id")
-                    ->execute([':id' => $vendaId]);
-            }
-
+            // RN8: Preservar produto_id e nomeProduto
             $sqlItem = "INSERT INTO vendas_itens (venda_id, produto_id, nomeProduto, quantidade, precoUnitario, totalItem) 
-                        VALUES (:venda_id, :prod_id, :nome, :qtd, :preco, :total)";
-
+                        VALUES (:venda_id, :prod_id, :nome, :qtd, :preco, :total_item)";
             $stmtItem = $this->db->prepare($sqlItem);
 
             foreach ($itens as $item) {
+                $qtd = (int)$item['quantidade'];
+                $preco = (float)$item['precoUnitario'];
+                
                 $stmtItem->execute([
                     ':venda_id' => $vendaId,
-                    ':prod_id'  => $item['produto_id'] ?? $item['id'], // Aceita ambos os formatos
-                    ':nome'     => $item['nomeProduto'] ?? $item['nome'],
-                    ':qtd'      => $item['quantidade'],
-                    ':preco'    => $item['precoUnitario'] ?? $item['preco'],
-                    ':total'    => $item['quantidade'] * ($item['precoUnitario'] ?? $item['preco'])
+                    ':prod_id'  => $item['produto_id'],
+                    ':nome'     => $item['nomeProduto'], // RN8 garantida
+                    ':qtd'      => $qtd,
+                    ':preco'    => $preco,
+                    ':total_item' => $qtd * $preco
                 ]);
             }
 
             $this->db->commit();
             return $vendaId;
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    public function atualizarVenda($id, $dadosVenda, $itens)
+    {
+        if (empty($itens)) {
+            throw new \Exception("A venda não pode ficar sem itens.");
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            $totais = $this->calcularTotais($dadosVenda, $itens);
+
+            $sql = "UPDATE vendas SET 
+                nomeCliente = :nome, 
+                percentualDesconto = :perc, 
+                subtotal = :sub, 
+                valorDesconto = :val_desc,
+                totalComDesconto = :total 
+                WHERE id = :id";
+
+            $this->db->prepare($sql)->execute([
+                ':nome'     => $dadosVenda['nomeCliente'],
+                ':perc'     => $dadosVenda['percentualDesconto'],
+                ':sub'      => $totais['subtotal'],
+                ':val_desc' => $totais['valorDesconto'],
+                ':total'    => $totais['totalComDesconto'],
+                ':id'        => $id
+            ]);
+
+            // UC16: Remove e insere novament
+            $this->db->prepare("DELETE FROM vendas_itens WHERE venda_id = :id")->execute([':id' => $id]);
+
+            $sqlItem = "INSERT INTO vendas_itens (venda_id, produto_id, nomeProduto, quantidade, precoUnitario, totalItem) 
+                        VALUES (:venda_id, :prod_id, :nome, :qtd, :preco, :total_item)";
+            $stmtItem = $this->db->prepare($sqlItem);
+
+            foreach ($itens as $item) {
+                $qtd = (int)$item['quantidade'];
+                $preco = (float)$item['precoUnitario'];
+
+                $stmtItem->execute([
+                    ':venda_id' => $id,
+                    ':prod_id'  => $item['produto_id'],
+                    ':nome'     => $item['nomeProduto'], // RN8 garantida
+                    ':qtd'      => $qtd,
+                    ':preco'    => $preco,
+                    ':total_item' => $qtd * $preco
+                ]);
+            }
+
+            $this->db->commit();
+            return true;
         } catch (\Exception $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
@@ -65,61 +148,15 @@ class Venda extends Model
             throw $e;
         }
     }
+
     public function excluirVendaCompleta($id)
     {
         try {
-            // Com o ON DELETE CASCADE no SQL, 
-            // deletar a venda já remove os itens automaticamente!
+            // Se houver FK com CASCADE no banco, isso apaga os itens automaticamente.
             $sql = "DELETE FROM vendas WHERE id = :id";
             $stmt = $this->db->prepare($sql);
             return $stmt->execute([':id' => $id]);
         } catch (\Exception $e) {
-            throw $e;
-        }
-    }
-
-    public function atualizarVenda($id, $dadosVenda, $itens)
-    {
-        try {
-            $this->db->beginTransaction();
-
-            // Atualiza a venda principal
-            $sql = "UPDATE vendas SET 
-                nomeCliente = :nome, 
-                dataVenda = :data,
-                percentualDesconto = :perc, 
-                subtotal = :sub, 
-                totalComDesconto = :total 
-                WHERE id = :id";
-            $this->db->prepare($sql)->execute([
-                ':nome' => $dadosVenda['nomeCliente'],
-                ':data' => $dadosVenda['dataVenda'],
-                ':perc' => $dadosVenda['percentualDesconto'],
-                ':sub'  => $dadosVenda['subtotal'],
-                ':total' => $dadosVenda['totalComDesconto'],
-                ':id'   => $id
-            ]);
-
-            // Remove os itens antigos e insere os novos (mais simples que fazer UPDATE em cada item)
-            $this->db->prepare("DELETE FROM vendas_itens WHERE venda_id = :id")->execute([':id' => $id]);
-
-            $sqlItem = "INSERT INTO vendas_itens (venda_id, produto_id, nomeProduto, quantidade, precoUnitario, totalItem) 
-                    VALUES (:venda_id, :prod_id, :nome, :qtd, :preco, :total)";
-            $stmtItem = $this->db->prepare($sqlItem);
-            foreach ($itens as $item) {
-                $stmtItem->execute([
-                    ':venda_id' => $id,
-                    ':prod_id'  => $item['produto_id'],
-                    ':nome'     => $item['nomeProduto'],
-                    ':qtd'      => $item['quantidade'],
-                    ':preco'    => $item['precoUnitario'],
-                    ':total'    => $item['quantidade'] * $item['precoUnitario']
-                ]);
-            }
-            $this->db->commit();
-            return true;
-        } catch (\Exception $e) {
-            $this->db->rollBack();
             throw $e;
         }
     }

@@ -146,7 +146,6 @@ class VendasController extends Controller
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         $dados = json_decode($response, true);
 
@@ -165,26 +164,31 @@ class VendasController extends Controller
         return $this->jsonResponse([], 'Erro ao buscar no Bling', $httpCode);
     }
 
-    public function show($id)
+    public function show($id = null)
     {
         try {
+            $id = $id ?? ($_GET['id'] ?? null); // Aceita ID via URL amigável ou Query String
+
+            if (!$id) {
+                return $this->jsonResponse(null, 'ID não fornecido', 400);
+            }
+
             $vendaModel = new Venda();
-            // Busca a venda
             $venda = $vendaModel->query("SELECT * FROM vendas WHERE id = :id", ['id' => $id]);
 
             if (!$venda) {
                 return $this->jsonResponse(null, 'Venda não encontrada', 404);
             }
 
-            // Busca os itens da venda
-            $itens = $vendaModel->query("SELECT * FROM vendas_item WHERE venda_id = :id", ['id' => $id]);
+            // CORREÇÃO: vendas_itens (com S no final)
+            $itens = $vendaModel->query("SELECT * FROM vendas_itens WHERE venda_id = :id", ['id' => $id]);
 
             return $this->jsonResponse([
                 'venda' => $venda[0],
                 'itens' => $itens
             ], 'Sucesso');
         } catch (\Exception $e) {
-            return $this->jsonResponse(null, $e->getMessage(), 500);
+            return $this->jsonResponse(null, 'Erro: ' . $e->getMessage(), 500);
         }
     }
 
@@ -203,6 +207,48 @@ class VendasController extends Controller
             return $this->jsonResponse(null, 'Venda removida com sucesso!', 200);
         } catch (\Exception $e) {
             return $this->jsonResponse(null, 'Erro no banco: ' . $e->getMessage(), 500);
+        }
+    }
+
+    public function update()
+    {
+        // O index.php já permite POST/PUT, então pegamos os dados
+        $id = $_GET['id'] ?? null;
+        $data = $this->getRequestData();
+
+        if (!$id || empty($data['nomeCliente']) || empty($data['itens'])) {
+            return $this->jsonResponse([], 'Dados incompletos para atualização.', 400);
+        }
+
+        // Validação de Desconto (Segurança)
+        $descontoPercentual = (float)($data['percentualDesconto'] ?? 0);
+        $descontoPercentual = max(0, min(100, $descontoPercentual));
+
+        // Recálculo total (Segurança no servidor)
+        $subtotal = 0;
+        foreach ($data['itens'] as $item) {
+            $subtotal += ($item['quantidade'] * $item['precoUnitario']);
+        }
+        $valorDesconto = $subtotal * ($descontoPercentual / 100);
+        $totalFinal = $subtotal - $valorDesconto;
+
+        try {
+            $vendaModel = new Venda();
+            $dataVenda = $data['dataVenda'] ?? date('Y-m-d'); // Garante que a data não seja perdida na atualização
+            $dadosVenda = [
+                'nomeCliente' => $data['nomeCliente'],
+                'dataVenda'   => $dataVenda,
+                'percentualDesconto' => $descontoPercentual,
+                'subtotal'    => $subtotal,
+                'totalComDesconto' => $totalFinal
+            ];
+
+            // Chama a função que você já tem no Model!
+            $vendaModel->atualizarVenda($id, $dadosVenda, $data['itens']);
+
+            return $this->jsonResponse(['id' => $id], 'Venda atualizada com sucesso!');
+        } catch (\Exception $e) {
+            return $this->jsonResponse([], 'Erro ao atualizar: ' . $e->getMessage(), 500);
         }
     }
 }
