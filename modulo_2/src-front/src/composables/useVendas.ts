@@ -73,10 +73,9 @@ export function useVendas() {
     buscarVendas();
   };
 
-  const excluirVenda = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir esta venda?')) return;
+  const excluirVenda = async (id: number, confirmar = true): Promise<boolean> => {
+    if (confirmar && !confirm("Deseja excluir?")) return false;
 
-    loading.value = true;
     try {
       const response = await fetch(`http://localhost:88/index.php/api/vendas/destroy?id=${id}`, {
         method: 'DELETE',
@@ -84,16 +83,12 @@ export function useVendas() {
       });
 
       if (response.ok) {
-        // Atualiza a lista localmente para não precisar recarregar tudo
         vendas.value.data = vendas.value.data.filter(v => v.id !== id);
-        alert('Venda excluída com sucesso!');
-      } else {
-        alert('Erro ao excluir venda.');
+        return true; // Retorno explícito
       }
+      return false; // Retorno explícito
     } catch (error) {
-      console.error("Erro:", error);
-    } finally {
-      loading.value = false;
+      return false; // Retorno explícito
     }
   };
 
