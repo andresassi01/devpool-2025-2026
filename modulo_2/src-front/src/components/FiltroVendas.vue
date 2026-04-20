@@ -87,11 +87,14 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
+import { reactive, ref, watch, onMounted } from 'vue';
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 
 const props = defineProps({ isLoading: Boolean });
 const emit = defineEmits(['pesquisar', 'limpar']);
 
+const route = useRoute();
+const router = useRouter();
 const erroData = ref(false);
 
 const filtros = reactive({
@@ -101,28 +104,53 @@ const filtros = reactive({
   ordem: 'dataVenda'
 });
 
-// Garante preenchimento de ambos os campos
+onMounted(() => {
+  // Recupera o cache se existir
+  const salvo = sessionStorage.getItem('cache_filtros_vendas');
+  
+  if (salvo) {
+    Object.assign(filtros, JSON.parse(salvo));
+    // Limpamos o cache imediatamente após ler. 
+    // Assim, se o usuário fechar a aba ou mudar de menu agora, o filtro não volta.
+    sessionStorage.removeItem('cache_filtros_vendas');
+    emitirPesquisa();
+  }
+
+  // Lógica de reset por query string (mantida por segurança)
+  if (route.query.reset === 'true') {
+    limparFiltros();
+    router.replace({ query: {} });
+  }
+});
+
+// A MÁGICA REVISADA: Agora ele aceita qualquer destino dentro de /vendas
+onBeforeRouteLeave((to) => {
+  // Se o destino começar com /vendas, ele mantém o filtro (cobre form, novo, edicao, etc)
+  const permanecendoNoModuloVendas = to.path.startsWith('/vendas');
+  
+  // Se estivermos saindo da listagem mas ficando no módulo (indo pro form), salva.
+  if (permanecendoNoModuloVendas) {
+    sessionStorage.setItem('cache_filtros_vendas', JSON.stringify(filtros));
+  } else {
+    // Se for para /dashboard, /produtos, etc., mata o filtro.
+    sessionStorage.removeItem('cache_filtros_vendas');
+  }
+});
+
 const validarDatas = () => {
   const { dataInicio, dataFim } = filtros;
-  
-  // Se ambos vazios, ok
   if (!dataInicio && !dataFim) {
     erroData.value = false;
     return true;
   }
-
-  // Se um existe e o outro não, erro
   if ((dataInicio && !dataFim) || (!dataInicio && dataFim)) {
     erroData.value = true;
     return false;
   }
-
   erroData.value = false;
   return true;
 };
 
-// FUNCIONALIDADE IGUAL AO FILTRO PRODUTOS:
-// Watcher para Data Início: Se ficar maior que a Fim, empurra a Fim para frente
 watch(() => filtros.dataInicio, (novaDataInicio) => {
   if (novaDataInicio && filtros.dataFim && new Date(novaDataInicio) > new Date(filtros.dataFim)) {
     filtros.dataFim = novaDataInicio;
@@ -130,7 +158,6 @@ watch(() => filtros.dataInicio, (novaDataInicio) => {
   validarDatas();
 });
 
-// Watcher para Data Fim: Se ficar menor que a Início, puxa a Início para trás
 watch(() => filtros.dataFim, (novaDataFim) => {
   if (novaDataFim && filtros.dataInicio && new Date(novaDataFim) < new Date(filtros.dataInicio)) {
     filtros.dataInicio = novaDataFim;
@@ -145,18 +172,14 @@ const emitirPesquisa = () => {
 };
 
 const limparFiltros = () => {
-  // Resetamos todas as propriedades do objeto reactive de uma só vez
   Object.assign(filtros, {
     cliente: '',
     dataInicio: '',
     dataFim: '',
     ordem: 'dataVenda'
   });
-
-  // Forçamos o estado do erro para falso
   erroData.value = false;
-
-  // Avisamos o componente pai para recarregar a lista sem filtros
+  sessionStorage.removeItem('cache_filtros_vendas');
   emit('limpar');
 };
 </script>

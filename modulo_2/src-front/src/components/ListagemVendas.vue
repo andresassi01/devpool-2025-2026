@@ -7,6 +7,10 @@
     <table class="table is-fullwidth is-striped is-hoverable table-fixed">
       <thead>
         <tr>
+          <th style="width: 40px;">
+            <input type="checkbox" @change="alternarTodos"
+              :checked="selecionados.length === vendas.length && vendas.length > 0">
+          </th>
           <th style="width: 80px;">ID</th>
           <th>Cliente</th>
           <th style="width: 150px;">Data</th>
@@ -16,6 +20,10 @@
       </thead>
       <tbody>
         <tr v-for="venda in (vendas || [])" :key="venda.id">
+          <td>
+            <input type="checkbox" :value="venda.id" v-model="selecionados">
+          </td>
+
           <td><strong>#{{ venda.id }}</strong></td>
 
           <td class="truncate" :title="venda.nomeCliente">
@@ -45,7 +53,7 @@
         </tr>
 
         <tr v-if="(!vendas || vendas.length === 0) && !isLoading">
-          <td colspan="5" class="has-text-centered py-6 is-size-5 has-text-grey">
+          <td colspan="6" class="has-text-centered py-6 is-size-5 has-text-grey">
             Nenhuma venda encontrada com os filtros selecionados.
           </td>
         </tr>
@@ -55,12 +63,17 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+
+import { ref, watch } from 'vue';
+
+const props = defineProps<{
   vendas: any[],
   isLoading: boolean
 }>();
 
-defineEmits(['visualizar', 'excluir']);
+const emit = defineEmits(['visualizar', 'excluir', 'selecao-alterada']);
+
+const selecionados = ref<number[]>([]);
 
 const formatarMoeda = (valor: any) => {
   const numero = Number(valor);
@@ -71,6 +84,26 @@ const formatarMoeda = (valor: any) => {
     currency: 'BRL'
   });
 };
+
+// Limpa a seleção quando a lista de vendas mudar
+watch(() => props.vendas, () => {
+  selecionados.value = [];
+});
+
+// Avisa o pai sobre as mudanças
+watch(selecionados, (novosIds) => {
+  emit('selecao-alterada', novosIds);
+});
+
+const alternarTodos = (event: any) => {
+  if (event.target.checked) {
+    // CORREÇÃO: Tipando o parâmetro 'v' como any para o erro 7006
+    selecionados.value = props.vendas.map((v: any) => v.id);
+  } else {
+    selecionados.value = [];
+  }
+};
+
 </script>
 
 <style scoped>
