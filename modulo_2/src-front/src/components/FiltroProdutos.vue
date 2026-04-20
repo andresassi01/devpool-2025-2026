@@ -41,7 +41,7 @@
           <label class="label">Critério / Situação</label>
           <div class="control">
             <div class="select is-fullwidth">
-              <select v-model="filtros.situacao">
+              <select v-model="filtros.situacao" @change="emitirPesquisa">
                 <option value="1">Últimos incluídos</option>
                 <option value="2">Ativos</option>
                 <option value="3">Inativos</option>
@@ -123,7 +123,6 @@ const validarDatas = () => {
 
 const emitirPesquisa = () => {
   if (validarDatas()) {
-    // Clonamos o objeto para garantir que o Vue não envie referências perdidas
     const payload = { ...toRaw(filtros) };
     emit('pesquisar', payload);
   }

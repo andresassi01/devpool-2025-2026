@@ -39,24 +39,23 @@ class ProdutosController extends Controller
         }
 
         // 3. Mapeamento de Situação
-        $mapaSituacao = [
-            '2' => '1', // Ativos
-            '3' => '2', // Inativos
-            '4' => '3', // Excluídos
-            '5' => '0'  // Todos
+        $mapa = [
+            '2' => '2', // Ativos
+            '3' => '3', // Inativos
+            '4' => '4', // Excluídos
+            '5' => '5'  // Todos
         ];
 
-        if (isset($mapaSituacao[$situacao]) && $situacao !== '1') {
-            $urlBling .= "&situacao=" . $mapaSituacao[$situacao];
+        if (isset($mapa[$situacao])) {
+
+            $urlBling .= "&criterio=" . $mapa[$situacao];
         }
 
-        // 4. Filtro de Data (Bling V3 exige YYYY-MM-DD e recomenda timestamp)
-        // Removida a trava de precisar das duas. Se tiver uma, ele já filtra.
         if (!empty($dataInicio)) {
-            $urlBling .= "&dataAlteracaoInicial=" . $dataInicio . " 00:00:00";
+            $urlBling .= "&dataAlteracaoInicial=" . urlencode(trim($dataInicio) . " 00:00:00");
         }
         if (!empty($dataFim)) {
-            $urlBling .= "&dataAlteracaoFinal=" . $dataFim . " 23:59:59";
+            $urlBling .= "&dataAlteracaoFinal=" . urlencode(trim($dataFim) . " 23:59:59");
         }
 
         $ch = curl_init($urlBling);
@@ -70,7 +69,7 @@ class ProdutosController extends Controller
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $dados = json_decode($response, true);
-       
+
 
         if ($httpCode === 200) {
             // Retorna os dados para o useProdutos.ts
