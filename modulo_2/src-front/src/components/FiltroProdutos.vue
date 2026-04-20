@@ -19,7 +19,8 @@
       </div>
     </div>
 
-    <div class="columns mb-0"> <div class="column is-3">
+    <div class="columns mb-0">
+      <div class="column is-3">
         <div class="field">
           <label class="label">Data Alteração (Início)</label>
           <div class="control">
@@ -75,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch, ref } from 'vue';
+import { reactive, watch, ref, toRaw } from 'vue';
 
 const props = defineProps({
   isLoading: Boolean,
@@ -122,7 +123,9 @@ const validarDatas = () => {
 
 const emitirPesquisa = () => {
   if (validarDatas()) {
-    emit('pesquisar', { ...filtros });
+    // Clonamos o objeto para garantir que o Vue não envie referências perdidas
+    const payload = { ...toRaw(filtros) };
+    emit('pesquisar', payload);
   }
 };
 

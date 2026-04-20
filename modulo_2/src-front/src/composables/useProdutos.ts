@@ -58,44 +58,40 @@ export function useProdutos() {
         dropdownAberto.value = null;
 
         try {
-            const params = new URLSearchParams({
+            // Sincronização exata dos nomes com o seu ProdutosController.php
+            const queryParams = new URLSearchParams({
                 pagina: pagina.value.toString(),
-                limite: LIMITE_POR_PAGINA.toString()
+                limite: LIMITE_POR_PAGINA.toString(),
+                nome: filtrosAtivos.nome,
+                sku: filtrosAtivos.sku,         // No PHP: $_GET['sku']
+                situacao: filtrosAtivos.situacao,   // No PHP: $_GET['situacao']
+                dataInicio: filtrosAtivos.dataInicio, // No PHP: $_GET['dataInicio']
+                dataFim: filtrosAtivos.dataFim        // No PHP: $_GET['dataFim']
             });
 
-            if (filtrosAtivos.nome) params.append('nome', filtrosAtivos.nome);
-            if (filtrosAtivos.sku) params.append('codigo', filtrosAtivos.sku);
-            if (filtrosAtivos.situacao) params.append('criterio', filtrosAtivos.situacao);
-            if (filtrosAtivos.dataInicio) params.append('dataAlteracaoInicial', filtrosAtivos.dataInicio);
-            if (filtrosAtivos.dataFim) params.append('dataAlteracaoFinal', filtrosAtivos.dataFim);
-
-            const resposta = await fetch('http://localhost:88/index.php/api/produtos/index?' + params.toString(), {
+            const resposta = await fetch('http://localhost:88/index.php/api/produtos?' + queryParams.toString(), {
                 method: 'GET',
-                headers: {
-                    'Accept': 'application/json'
-                },
+                headers: { 'Accept': 'application/json' },
                 credentials: 'include'
             });
             const dados = await resposta.json();
 
             if (resposta.ok) {
+                // Atualiza a lista que vai para o ListagemProdutos.vue
                 produtos.value = dados.data || [];
                 temMaisPaginas.value = produtos.value.length === LIMITE_POR_PAGINA;
             } else if (resposta.status === 401) {
                 router.push('/');
-            } else if (resposta.status === 404) {
-                produtos.value = [];
-                temMaisPaginas.value = false;
             } else {
                 throw new Error(dados.message || 'Erro ao buscar produtos');
             }
         } catch (err: any) {
             erro.value = true;
-            console.error("Erro na busca de produtos:", err.message);
+            console.error("Erro na busca:", err.message);
             produtos.value = [];
-            temMaisPaginas.value = false;
         } finally {
             carregando.value = false;
+            // Salva o estado para quando você voltar de uma edição
             sessionStorage.setItem('ultimo_estado_filtro', JSON.stringify({
                 filtros: filtrosAtivos,
                 pagina: pagina.value
@@ -144,17 +140,25 @@ export function useProdutos() {
 
 
     const handlePesquisa = (novosFiltros: any) => {
+        // Mescla os filtros do componente filho para o estado global do composable
         Object.assign(filtrosAtivos, novosFiltros);
-        pagina.value = 1;
-        produtosSelecionados.value = [];
-        buscarProdutos();
+        pagina.value = 1; // Reseta página
+        produtosSelecionados.value = []; // Limpa seleção
+        buscarProdutos(); // Chama o PHP
     };
 
     const handleLimpar = () => {
+        // 1. Volta os filtros para o estado inicial (vazio)
         Object.assign(filtrosAtivos, filtrosIniciais);
+
+        // 2. Reseta paginação e seleção
         pagina.value = 1;
         produtosSelecionados.value = [];
+
+        // 3. Limpa o cache da sessão para não voltar o filtro ao dar F5
         sessionStorage.removeItem('ultimo_estado_filtro');
+
+        // 4. ESSENCIAL: Busca a lista limpa do servidor
         buscarProdutos();
     };
 
@@ -162,6 +166,7 @@ export function useProdutos() {
         if (novaPagina < 1 || (novaPagina > pagina.value && !temMaisPaginas.value)) return;
         pagina.value = novaPagina;
         produtosSelecionados.value = [];
+        // 5. Busca os dados da nova página mantendo os filtros ativos
         buscarProdutos();
     };
 
