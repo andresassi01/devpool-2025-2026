@@ -4,8 +4,14 @@ namespace App\Models;
 
 use App\Core\Model;
 
+/**
+ * Model Venda: Centraliza as Regras de Negócio (RN) e persistência de dados.
+ */
 class Venda extends Model
 {
+    /**
+     * Executa consultas preparadas (Prepared Statements) para evitar SQL Injection.
+     */
     public function query($sql, $params = [])
     {
         $stmt = $this->db->prepare($sql);
@@ -14,9 +20,13 @@ class Venda extends Model
     }
 
     /**
-     * RN14 e RN19: Recalcula os valores no servidor para garantir a integridade.
+     * RN14 e RN19: Recalcula todos os valores no servidor.
+     * Nunca confiamos apenas no cálculo feito pelo JavaScript/Frontend.
+     * * @param array $dadosVenda Cabecalho da venda com o percentual de desconto.
+     * @param array $itens Lista de itens da venda.
+     * @return array Totais calculados.
      */
-    private function calcularTotais($dadosVenda, $itens)
+    private function calcularTotais(array $dadosVenda, array $itens)
     {
         $subtotal = 0;
         foreach ($itens as $item) {
@@ -26,21 +36,28 @@ class Venda extends Model
         }
 
         $percentualDesconto = (float)($dadosVenda['percentualDesconto'] ?? 0);
+        
+        // Garante que o desconto esteja entre 0 e 100%
+        $percentualDesconto = max(0, min(100, $percentualDesconto));
+        
         $valorDesconto = $subtotal * ($percentualDesconto / 100);
         $totalComDesconto = $subtotal - $valorDesconto;
 
         return [
-            'subtotal' => $subtotal,
-            'valorDesconto' => $valorDesconto,
-            'totalComDesconto' => $totalComDesconto
+            'subtotal' => (float)$subtotal,
+            'valorDesconto' => (float)$valorDesconto,
+            'totalComDesconto' => (float)$totalComDesconto,
+            'percentualDesconto' => (float)$percentualDesconto
         ];
     }
 
+    /**
+     * RN17: Salva a venda e seus itens usando transação atômica.
+     */
     public function salvarVendaCompleta(array $dadosVenda, array $itens)
     {
-        // RN17 - Trava de segurança
         if (empty($itens)) {
-            throw new \Exception("A venda deve conter pelo menos um item.");
+            throw new \Exception("RN17: A venda deve conter pelo menos um item.");
         }
 
         $this->db->beginTransaction();
@@ -48,14 +65,14 @@ class Venda extends Model
         try {
             $totais = $this->calcularTotais($dadosVenda, $itens);
 
-            $sqlVenda = "INSERT INTO vendas (nomeCliente, dataVenda, percentualDesconto, subtotal, valorDesconto, totalComDesconto) 
-                         VALUES (:nome, :data, :desconto, :subtotal, :v_desc, :total)";
+            $sqlVenda = "INSERT INTO vendas (nomeCliente, dataVenda, percentualDesconto, subtotal, valorDesconto, totalComDesconto, situacao) 
+                         VALUES (:nome, :data, :desconto, :subtotal, :v_desc, :total, 'Em aberto')";
 
             $stmtVenda = $this->db->prepare($sqlVenda);
             $stmtVenda->execute([
                 ':nome'     => $dadosVenda['nomeCliente'],
                 ':data'     => $dadosVenda['dataVenda'],
-                ':desconto' => $dadosVenda['percentualDesconto'],
+                ':desconto' => $totais['percentualDesconto'],
                 ':subtotal' => $totais['subtotal'],
                 ':v_desc'   => $totais['valorDesconto'],
                 ':total'    => $totais['totalComDesconto']
@@ -63,7 +80,7 @@ class Venda extends Model
 
             $vendaId = $this->db->lastInsertId();
 
-            // RN8: Preservar produto_id e nomeProduto
+            // RN8: Preservar produto_id e nomeProduto original no momento da venda
             $sqlItem = "INSERT INTO vendas_itens (venda_id, produto_id, nomeProduto, quantidade, precoUnitario, totalItem) 
                         VALUES (:venda_id, :prod_id, :nome, :qtd, :preco, :total_item)";
             $stmtItem = $this->db->prepare($sqlItem);
@@ -75,7 +92,7 @@ class Venda extends Model
                 $stmtItem->execute([
                     ':venda_id' => $vendaId,
                     ':prod_id'  => $item['produto_id'],
-                    ':nome'     => $item['nomeProduto'], // RN8 garantida
+                    ':nome'     => $item['nomeProduto'],
                     ':qtd'      => $qtd,
                     ':preco'    => $preco,
                     ':total_item' => $qtd * $preco
@@ -90,35 +107,40 @@ class Venda extends Model
         }
     }
 
-    public function atualizarVenda($id, $dadosVenda, $itens)
+    /**
+     * Atualiza os dados de uma venda existente e sincroniza os itens.
+     */
+    public function atualizarVenda($id, array $dadosVenda, array $itens)
     {
         if (empty($itens)) {
             throw new \Exception("A venda não pode ficar sem itens.");
         }
 
-        try {
-            $this->db->beginTransaction();
+        $this->db->beginTransaction();
 
+        try {
             $totais = $this->calcularTotais($dadosVenda, $itens);
 
             $sql = "UPDATE vendas SET 
-                nomeCliente = :nome, 
-                percentualDesconto = :perc, 
-                subtotal = :sub, 
-                valorDesconto = :val_desc,
-                totalComDesconto = :total 
-                WHERE id = :id";
+                        nomeCliente = :nome, 
+                        dataVenda = :data,
+                        percentualDesconto = :perc, 
+                        subtotal = :sub, 
+                        valorDesconto = :val_desc,
+                        totalComDesconto = :total 
+                    WHERE id = :id";
 
             $this->db->prepare($sql)->execute([
                 ':nome'     => $dadosVenda['nomeCliente'],
-                ':perc'     => $dadosVenda['percentualDesconto'],
+                ':data'     => $dadosVenda['dataVenda'],
+                ':perc'     => $totais['percentualDesconto'],
                 ':sub'      => $totais['subtotal'],
                 ':val_desc' => $totais['valorDesconto'],
                 ':total'    => $totais['totalComDesconto'],
-                ':id'        => $id
+                ':id'       => $id
             ]);
 
-            // UC16: Remove e insere novament
+            // UC16: Sincronização de itens (Delete & Insert)
             $this->db->prepare("DELETE FROM vendas_itens WHERE venda_id = :id")->execute([':id' => $id]);
 
             $sqlItem = "INSERT INTO vendas_itens (venda_id, produto_id, nomeProduto, quantidade, precoUnitario, totalItem) 
@@ -132,7 +154,7 @@ class Venda extends Model
                 $stmtItem->execute([
                     ':venda_id' => $id,
                     ':prod_id'  => $item['produto_id'],
-                    ':nome'     => $item['nomeProduto'], // RN8 garantida
+                    ':nome'     => $item['nomeProduto'],
                     ':qtd'      => $qtd,
                     ':preco'    => $preco,
                     ':total_item' => $qtd * $preco
@@ -142,22 +164,19 @@ class Venda extends Model
             $this->db->commit();
             return true;
         } catch (\Exception $e) {
-            if ($this->db->inTransaction()) {
-                $this->db->rollBack();
-            }
+            $this->db->rollBack();
             throw $e;
         }
     }
 
+    /**
+     * Exclui uma venda. 
+     * Nota: No banco de dados, certifique-se que a FK de itens está com ON DELETE CASCADE.
+     */
     public function excluirVendaCompleta($id)
     {
-        try {
-            // Se houver FK com CASCADE no banco, isso apaga os itens automaticamente.
-            $sql = "DELETE FROM vendas WHERE id = :id";
-            $stmt = $this->db->prepare($sql);
-            return $stmt->execute([':id' => $id]);
-        } catch (\Exception $e) {
-            throw $e;
-        }
+        $sql = "DELETE FROM vendas WHERE id = :id";
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([':id' => $id]);
     }
 }

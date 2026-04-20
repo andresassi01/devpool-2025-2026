@@ -7,8 +7,7 @@
           <h1 class="title">Gestão de Vendas</h1>
         </div>
         <div class="level-right">
-          <button v-if="idsSelecionados.length > 0" class="button is-danger is-outlined mr-2"
-            @click="abrirModalExclusaoLote">
+          <button v-if="idsSelecionados.length > 0" class="button is-danger is-outlined mr-2" @click="abrirModalExclusaoLote">
             <span class="icon"><i class="fas fa-trash-alt"></i></span>
             <span>Excluir ({{ idsSelecionados.length }})</span>
           </button>
@@ -16,7 +15,6 @@
             <span class="icon"><i class="fas fa-plus"></i></span>
             <span>Nova Venda</span>
           </router-link>
-
         </div>
       </div>
 
@@ -29,9 +27,7 @@
         :tem-mais="vendas.temMais || false" :is-loading="loading" @mudar-pagina="trocarPagina" />
     </div>
 
-    <FeedbackNotificacao :ativo="notificacao.ativo" :mensagem="notificacao.mensagem" :tipo="notificacao.tipo"
-      @fechar="notificacao.ativo = false" />
-
+    <FeedbackNotificacao :ativo="notificacao.ativo" :mensagem="notificacao.mensagem" :tipo="notificacao.tipo" @fechar="notificacao.ativo = false" />
     <ConfirmarExclusao :ativo="modalExclusao.ativo" :titulo="modalExclusao.titulo" :mensagem="modalExclusao.mensagem"
       :is-loading="loading" @fechar="modalExclusao.ativo = false" @confirmar="executarExclusao" />
   </section>
@@ -59,62 +55,27 @@ const handlePesquisa = (novosFiltros: any) => {
 };
 
 const handleLimpar = () => {
-  filtros.value = {
-    cliente: '',
-    dataInicio: '',
-    dataFim: '',
-    ordem: 'dataVenda'
-  };
+  filtros.value = { cliente: '', dataInicio: '', dataFim: '', ordem: 'dataVenda' };
   vendas.value.pagina = 1;
   buscarVendas();
 };
 
-const irParaEdicao = (id: number) => {
-  // Redireciona para a tela de cadastro, mas passando o ID
-  router.push(`/vendas/editar/${id}`);
-};
+const irParaEdicao = (id: number) => router.push(`/vendas/editar/${id}`);
 
-const notificacao = ref({
-  ativo: false,
-  mensagem: '',
-  tipo: 'sucesso'
-});
-
+const notificacao = ref({ ativo: false, mensagem: '', tipo: 'sucesso' });
 const dispararNotificacao = (msg: string, tipo = 'sucesso') => {
   notificacao.value = { ativo: true, mensagem: msg, tipo };
   setTimeout(() => notificacao.value.ativo = false, 3500);
 };
 
-// Estados para o Modal de Exclusão
-const modalExclusao = ref({
-  ativo: false,
-  titulo: '',
-  mensagem: '',
-  idParaExcluir: null as number | null,
-  isLote: false
-});
+const modalExclusao = ref({ ativo: false, titulo: '', mensagem: '', idParaExcluir: null as number | null, isLote: false });
 
-// Função que abre o modal para exclusão individual
 const abrirModalExclusao = (id: number) => {
-  modalExclusao.value = {
-    ativo: true,
-    titulo: 'Confirmar Exclusão',
-    mensagem: `Tem certeza que deseja excluir a venda #${id}?`,
-    idParaExcluir: id,
-    isLote: false
-  };
+  modalExclusao.value = { ativo: true, titulo: 'Confirmar Exclusão', mensagem: `Tem certeza que deseja excluir a venda #${id}?`, idParaExcluir: id, isLote: false };
 };
 
-// Função que abre o modal para exclusão em lote
 const abrirModalExclusaoLote = () => {
-  const total = idsSelecionados.value.length;
-  modalExclusao.value = {
-    ativo: true,
-    titulo: 'Excluir em Lote',
-    mensagem: `Você selecionou ${total} vendas. Deseja excluir todas permanentemente?`,
-    idParaExcluir: null,
-    isLote: true
-  };
+  modalExclusao.value = { ativo: true, titulo: 'Excluir em Lote', mensagem: `Você selecionou ${idsSelecionados.value.length} vendas. Deseja excluir todas permanentemente?`, idParaExcluir: null, isLote: true };
 };
 
 const executarExclusao = async () => {
@@ -123,7 +84,6 @@ const executarExclusao = async () => {
     if (modalExclusao.value.isLote) {
       let sucessos = 0;
       for (const id of idsSelecionados.value) {
-        // Mudamos de "const ok = await..." para apenas await
         await excluirVenda(id, false); 
         sucessos++;
       }

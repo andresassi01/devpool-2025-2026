@@ -4,34 +4,48 @@ namespace App\Controllers\Api;
 
 use App\Core\Controller;
 use App\Models\Venda;
+use App\Middleware\AuthBlingMiddleware;
 
+/**
+ * Controller responsável pela gestão de vendas no banco de dados local
+ * e integração de busca de produtos via API externa (Bling).
+ */
 class VendasController extends Controller
 {
+    /**
+     * Aplica o Middleware de autenticação para todas as rotas de vendas.
+     */
+    public function __construct()
+    {
+        $this->middleware(AuthBlingMiddleware::class);
+    }
 
+    /**
+     * Lista as vendas com filtros de cliente, período e ordenação.
+     * Implementa paginação lógica para o Frontend.
+     * * @return jsonResponse
+     */
     public function index()
     {
         try {
-            // Capturar parâmetros
             $cliente = $_GET['cliente'] ?? null;
             $dataInicio = $_GET['dataInicio'] ?? null;
             $dataFim = $_GET['dataFim'] ?? null;
             $ordem = $_GET['ordem'] ?? 'dataVenda';
 
-            // Paginação
             $pagina = isset($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
             $limite = 10;
             $offset = ($pagina - 1) * $limite;
             $limiteParaCheck = $limite + 1;
 
-            // Validação de Datas
+            // Validação de consistência de datas
             if (($dataInicio && !$dataFim) || (!$dataInicio && $dataFim)) {
-                return $this->jsonResponse(null, 'Informe o período completo (Início e Fim) para filtrar por data.', 400);
+                return $this->jsonResponse(null, 'Informe o período completo (Início e Fim).', 400);
             }
             if ($dataInicio && $dataFim && strtotime($dataInicio) > strtotime($dataFim)) {
-                return $this->jsonResponse(null, 'A data inicial não pode ser maior que a data final.', 400);
+                return $this->jsonResponse(null, 'A data inicial não pode ser maior que a final.', 400);
             }
 
-            // Montar a SQL
             $sql = "SELECT id, numero, nomeCliente, dataVenda, totalComDesconto, situacao FROM vendas WHERE 1=1";
             $params = [];
 
@@ -48,20 +62,13 @@ class VendasController extends Controller
 
             $colunasPermitidas = ['dataVenda', 'totalComDesconto', 'nomeCliente'];
             $colunaOrdem = in_array($ordem, $colunasPermitidas) ? $ordem : 'dataVenda';
-            $sql .= " ORDER BY $colunaOrdem DESC, id DESC";
-
-            // Adicionar Paginação na SQL 
-            $sql .= " LIMIT $limiteParaCheck OFFSET $offset";
+            $sql .= " ORDER BY $colunaOrdem DESC, id DESC LIMIT $limiteParaCheck OFFSET $offset";
 
             $db = new Venda();
             $vendas = $db->query($sql, $params);
 
-            // Lógica para o botão "Próximo" do Vue
             $temMais = count($vendas) > $limite;
-
-            if ($temMais) {
-                array_pop($vendas);
-            }
+            if ($temMais) array_pop($vendas);
 
             return $this->jsonResponse([
                 'data' => $vendas,
@@ -73,55 +80,40 @@ class VendasController extends Controller
         }
     }
 
-
+    /**
+     * Registra uma nova venda e seus itens no banco de dados.
+     * Delega o cálculo final de totais para o Model (Regra de Negócio).
+     * * @return jsonResponse
+     */
     public function store()
     {
         $this->validateRequestMethods(['POST']);
         $data = $this->getRequestData();
 
-        if (empty($data['nomeCliente']) || empty($data['itens']) || count($data['itens']) === 0) {
-            return $this->jsonResponse([], 'Dados incompletos: Nome do cliente e itens são obrigatórios.', 400);
+        if (empty($data['nomeCliente']) || empty($data['itens'])) {
+            return $this->jsonResponse([], 'Dados incompletos.', 400);
         }
-
-
-
-        $descontoPercentual = (float)($data['percentualDesconto'] ?? 0);
-
-        if ($descontoPercentual < 0) {
-            $descontoPercentual = 0;
-        } elseif ($descontoPercentual > 100) {
-            $descontoPercentual = 100;
-        }
-
-        $subtotal = 0;
-        foreach ($data['itens'] as $item) {
-            $subtotal += ($item['quantidade'] * $item['precoUnitario']);
-        }
-        $valorDesconto = $subtotal * ($descontoPercentual / 100);
-        $totalFinal = $subtotal - $valorDesconto;
 
         try {
             $vendaModel = new Venda();
-
             $dadosVenda = [
                 'numero' => $data['numero'] ?? null,
                 'nomeCliente' => $data['nomeCliente'],
                 'dataVenda'   => $data['dataVenda'] ?? date('Y-m-d'),
-                'subtotal'    => $subtotal,
-                'valorDesconto' => $valorDesconto,
-                'percentualDesconto' => $descontoPercentual,
-                'totalComDesconto' => $totalFinal,
-                'situacao' => 'Em aberto'
+                'percentualDesconto' => (float)($data['percentualDesconto'] ?? 0)
             ];
 
             $id = $vendaModel->salvarVendaCompleta($dadosVenda, $data['itens']);
-
             return $this->jsonResponse(['id' => $id], 'Venda cadastrada com sucesso!', 201);
         } catch (\Exception $e) {
             return $this->jsonResponse([], 'Erro ao salvar venda: ' . $e->getMessage(), 500);
         }
     }
 
+    /**
+     * Busca produtos diretamente na API do Bling para preenchimento da venda.
+     * * @return jsonResponse
+     */
     public function buscarProdutosNoBling()
     {
         $nome = $_GET['nome'] ?? '';
@@ -129,12 +121,10 @@ class VendasController extends Controller
             return $this->jsonResponse([], 'Digite pelo menos 3 caracteres');
         }
 
-        $accessToken = $_COOKIE['bling_token'] ?? '';
-        if (!$accessToken) {
-            return $this->jsonResponse([], 'Não autenticado', 401);
-        }
+        // O token é recuperado do cookie/sessão validado pelo Middleware
+        $accessToken = $_COOKIE['bling_token'] ?? $_SESSION['bling_access_token'] ?? '';
 
-        $url = "https://www.bling.com.br/Api/v3/produtos?nome=" . urlencode($nome) . "&limite=10";
+        $url = BLING_API_URL . "/produtos?nome=" . urlencode($nome) . "&limite=10";
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -146,17 +136,14 @@ class VendasController extends Controller
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
         $dados = json_decode($response, true);
-
+       
         if ($httpCode === 200) {
-            $formatados = array_map(function ($item) {
-                return [
-                    'id' => $item['id'],
-                    'nome' => $item['nome'],
-                    'preco' => $item['preco']
-                ];
-            }, $dados['data'] ?? []);
+            $formatados = array_map(fn($item) => [
+                'id' => $item['id'],
+                'nome' => $item['nome'],
+                'preco' => $item['preco']
+            ], $dados['data'] ?? []);
 
             return $this->jsonResponse($formatados, 'Sucesso');
         }
@@ -164,23 +151,22 @@ class VendasController extends Controller
         return $this->jsonResponse([], 'Erro ao buscar no Bling', $httpCode);
     }
 
+    /**
+     * Exibe detalhes de uma venda específica e seus itens.
+     * * @param int|null $id
+     * @return jsonResponse
+     */
     public function show($id = null)
     {
         try {
-            $id = $id ?? ($_GET['id'] ?? null); // Aceita ID via URL amigável ou Query String
-
-            if (!$id) {
-                return $this->jsonResponse(null, 'ID não fornecido', 400);
-            }
+            $id = $id ?? ($_GET['id'] ?? null);
+            if (!$id) return $this->jsonResponse(null, 'ID não fornecido', 400);
 
             $vendaModel = new Venda();
             $venda = $vendaModel->query("SELECT * FROM vendas WHERE id = :id", ['id' => $id]);
 
-            if (!$venda) {
-                return $this->jsonResponse(null, 'Venda não encontrada', 404);
-            }
+            if (!$venda) return $this->jsonResponse(null, 'Venda não encontrada', 404);
 
-            // CORREÇÃO: vendas_itens (com S no final)
             $itens = $vendaModel->query("SELECT * FROM vendas_itens WHERE venda_id = :id", ['id' => $id]);
 
             return $this->jsonResponse([
@@ -192,14 +178,14 @@ class VendasController extends Controller
         }
     }
 
+    /**
+     * Remove uma venda e seus itens associados.
+     * * @return jsonResponse
+     */
     public function destroy()
     {
-        // Tenta pegar o ID de onde ele estiver vindo
         $id = $_GET['id'] ?? null;
-
-        if (!$id) {
-            return $this->jsonResponse(null, 'ID não encontrado', 400);
-        }
+        if (!$id) return $this->jsonResponse(null, 'ID não encontrado', 400);
 
         try {
             $model = new Venda();
@@ -210,42 +196,28 @@ class VendasController extends Controller
         }
     }
 
+    /**
+     * Atualiza os dados de uma venda e sincroniza seus itens.
+     * * @return jsonResponse
+     */
     public function update()
     {
-        // O index.php já permite POST/PUT, então pegamos os dados
         $id = $_GET['id'] ?? null;
         $data = $this->getRequestData();
 
         if (!$id || empty($data['nomeCliente']) || empty($data['itens'])) {
-            return $this->jsonResponse([], 'Dados incompletos para atualização.', 400);
+            return $this->jsonResponse([], 'Dados incompletos.', 400);
         }
-
-        // Validação de Desconto (Segurança)
-        $descontoPercentual = (float)($data['percentualDesconto'] ?? 0);
-        $descontoPercentual = max(0, min(100, $descontoPercentual));
-
-        // Recálculo total (Segurança no servidor)
-        $subtotal = 0;
-        foreach ($data['itens'] as $item) {
-            $subtotal += ($item['quantidade'] * $item['precoUnitario']);
-        }
-        $valorDesconto = $subtotal * ($descontoPercentual / 100);
-        $totalFinal = $subtotal - $valorDesconto;
 
         try {
             $vendaModel = new Venda();
-            $dataVenda = $data['dataVenda'] ?? date('Y-m-d'); // Garante que a data não seja perdida na atualização
             $dadosVenda = [
                 'nomeCliente' => $data['nomeCliente'],
-                'dataVenda'   => $dataVenda,
-                'percentualDesconto' => $descontoPercentual,
-                'subtotal'    => $subtotal,
-                'totalComDesconto' => $totalFinal
+                'dataVenda'   => $data['dataVenda'] ?? date('Y-m-d'),
+                'percentualDesconto' => (float)($data['percentualDesconto'] ?? 0)
             ];
 
-            // Chama a função que você já tem no Model!
             $vendaModel->atualizarVenda($id, $dadosVenda, $data['itens']);
-
             return $this->jsonResponse(['id' => $id], 'Venda atualizada com sucesso!');
         } catch (\Exception $e) {
             return $this->jsonResponse([], 'Erro ao atualizar: ' . $e->getMessage(), 500);
