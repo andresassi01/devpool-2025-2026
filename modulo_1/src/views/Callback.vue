@@ -3,51 +3,20 @@
     <div class="container" style="max-width: 600px; margin: 0 auto;">
 
       <div v-if="loading">
-        <h2 class="title is-4">Processando login...</h2>
-        <button class="button is-loading is-large is-ghost">Carregando</button>
+        <h2 class="title is-4">Finalizando integração com Bling...</h2>
+        <button class="button is-loading is-large is-ghost">Processando</button>
+        <p>Estamos estabelecendo uma conexão segura.</p>
       </div>
 
       <div v-else-if="sucesso" class="notification is-success">
-        <h2 class="title is-5">Login realizado com sucesso!</h2>
-        <p>Redirecionando para produtos...</p>
+        <h2 class="title is-5">Conexão realizada com sucesso!</h2>
+        <p>Redirecionando para o painel...</p>
       </div>
 
-      <div v-else-if="erroCors" class="box has-text-left">
-        <h2 class="title is-4 has-text-warning-dark">
-          <span class="icon"><i class="fas fa-exclamation-triangle"></i></span>
-          Atenção: Bloqueio de CORS detectado
-        </h2>
-        <p class="mb-4">
-          O navegador bloqueou a troca automática do token (comportamento padrão em localhost).
-          Conforme a página 11 dos requisitos, utilize o Postman ou insira o token manualmente abaixo.
-        </p>
-
-        <div class="field">
-          <label class="label">Seu Código de Autorização (Code):</label>
-          <div class="control has-icons-right">
-            <input class="input" type="text" :value="authCode" readonly @click="copiarCode">
-            <span class="icon is-small is-right"><i class="fas fa-copy"></i></span>
-          </div>
-          <p class="help">Use este código no Postman para gerar o Access Token.</p>
-        </div>
-
-        <hr>
-
-        <div class="field">
-          <label class="label">Cole seu Access Token aqui:</label>
-          <div class="control">
-            <input class="input is-primary" type="text" v-model="tokenManual"
-              placeholder="Cole o token gerado no Postman...">
-          </div>
-        </div>
-
-        <button class="button is-primary is-fullwidth mt-3" @click="salvarTokenManual" :disabled="!tokenManual">
-          Salvar e Acessar Produtos
-        </button>
-
-        <p class="has-text-centered mt-4">
-          <a class="has-text-grey" @click="router.push('/')">Cancelar e Voltar</a>
-        </p>
+      <div v-else class="notification is-danger">
+        <h2 class="title is-5">Erro na Autenticação</h2>
+        <p>{{ mensagemErro }}</p>
+        <button class="button is-light mt-3" @click="router.push('/')">Tentar novamente</button>
       </div>
 
     </div>
@@ -63,25 +32,17 @@ const router = useRouter();
 
 const loading = ref(true);
 const sucesso = ref(false);
-const erroCors = ref(false);
-const authCode = ref('');
-const tokenManual = ref('');
-
-const CLIENT_ID = import.meta.env.VITE_BLING_CLIENT_ID;
-const CLIENT_SECRET = import.meta.env.VITE_BLING_CLIENT_SECRET;
-const REDIRECT_URI = 'http://localhost:5173/callback';
+const mensagemErro = ref('');
 
 onMounted(async () => {
   const code = route.query.code as string;
   const state = route.query.state as string;
   const savedState = localStorage.getItem('auth_state');
 
-  authCode.value = code;
-
-
+  // 1. Validação de Segurança básica
   if (!state || state !== savedState) {
-    alert('Erro de Segurança: State inválido.');
-    router.push('/');
+    mensagemErro.value = 'Estado de segurança inválido. Inicie o login novamente.';
+    loading.value = false;
     return;
   }
 
@@ -90,66 +51,50 @@ onMounted(async () => {
     return;
   }
 
-
   try {
-    const credentials = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
-    const urlencoded = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code: code,
-      redirect_uri: REDIRECT_URI,
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET
-    });
-
-    const resposta = await fetch('/Api/v3/oauth/token', {
+    // 2. ENVIANDO PARA O PHP (Porta 88)
+    const resposta = await fetch('http://localhost:88/api/auth/blingToken', {
       method: 'POST',
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${credentials}`
+        'Content-Type': 'application/json'
       },
-      body: urlencoded
+      body: JSON.stringify({ code: code }),
+      // CRITICAL: Permite que o navegador armazene o cookie HttpOnly enviado pelo PHP
+      credentials: 'include' 
     });
 
+    const dados = await resposta.json();
+
     if (resposta.ok) {
-      const dados = await resposta.json();
+      // 3. SALVANDO O TOKEN REAL 
+      // O PHP deve retornar o access_token no corpo da resposta
+      const token = dados.data?.access_token || dados.access_token;
+      
+      if (token) {
+        localStorage.setItem('bling_access_token', token);
+      }
+
+      // Mantemos a flag de logado para compatibilidade
+      localStorage.setItem('usuario_logado', 'true');
+      
       sucesso.value = true;
       loading.value = false;
-      finalizarLogin(dados.access_token);
+      
+      // Limpa o state de segurança usado
+      localStorage.removeItem('auth_state');
+
+      // 4. Redirecionamento
+      setTimeout(() => {
+        router.push('/produtos'); 
+      }, 1500);
+      
     } else {
-      throw new Error('Não foi possível obter o token automaticamente.');
+      throw new Error(dados.message || 'Erro ao processar token no servidor.');
     }
-  } catch (err) {
-    if (!sucesso.value) {
-      console.warn("Troca automática indisponível. Ativando contingência manual.");
-      loading.value = false;
-      erroCors.value = true;
-    }
+  } catch (err: any) {
+    console.error("Erro no Callback:", err);
+    mensagemErro.value = err.message || 'Não foi possível conectar ao servidor PHP.';
+    loading.value = false;
   }
 });
-
-const finalizarLogin = (token: string) => {
-  const seisHorasEmMs = 6 * 60 * 60 * 1000;
-  const dataExpiracao = new Date().getTime() + seisHorasEmMs;
-
-  localStorage.setItem('bling_access_token', token);
-  localStorage.setItem('bling_token_expires', dataExpiracao.toString());
-  localStorage.removeItem('auth_state');
-
-  setTimeout(() => {
-    router.push('/produtos');
-  }, 1500);
-};
-
-const salvarTokenManual = () => {
-  if (tokenManual.value) {
-    sucesso.value = true;
-    erroCors.value = false;
-    finalizarLogin(tokenManual.value);
-  }
-};
-
-const copiarCode = () => {
-  navigator.clipboard.writeText(authCode.value);
-  alert('Código copiado!');
-};
 </script>

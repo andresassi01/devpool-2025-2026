@@ -29,6 +29,7 @@
 
                 <div class="navbar-dropdown is-right">
                   <router-link class="navbar-item" to="/produtos">Painel de Produtos</router-link>
+                  <router-link class="navbar-item" to="/vendas">Minhas Vendas</router-link>
                   <hr class="navbar-divider">
                   <a class="navbar-item has-text-danger" @click="logout">Sair</a>
                 </div>
@@ -44,32 +45,72 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { loginNoBling, isTokenValido } from '../services/auth';
+import { loginNoBling } from '../services/auth'; 
 
 const route = useRoute();
 const router = useRouter();
 const menuAtivo = ref(false);
-const token = ref(isTokenValido());
+const token = ref<string | null>(null);
 
 const atualizarStatusSessao = () => {
-  token.value = isTokenValido();
+  token.value = localStorage.getItem('bling_access_token');
 };
+
+// Função para limpar o estado local sem precisar chamar o logout do servidor de novo
+const limparSessaoLocal = () => {
+  localStorage.removeItem('bling_access_token');
+  localStorage.removeItem('usuario_logado');
+  token.value = null;
+  
+  // Se o usuário estiver em uma página que exige login, redireciona para a home
+  if (route.meta.requiresAuth) {
+    router.push('/');
+  }
+};
+
+onMounted(async () => {
+  // 1. Checagem imediata pelo LocalStorage (visual rápido)
+  atualizarStatusSessao();
+
+  // 2. Validação Real (Sincronização com o Cookie do Backend)
+  if (token.value) {
+    try {
+      const response = await fetch('http://localhost:88/api/auth/check', {
+        method: 'GET',
+        credentials: 'include' // Obrigatório para enviar o cookie HttpOnly
+      });
+
+      if (!response.ok) {
+        // Se o PHP retornar 401 ou erro, o cookie expirou.
+        limparSessaoLocal();
+      }
+    } catch (error) {
+      console.error("Erro ao validar sessão no carregamento:", error);
+    }
+  }
+});
 
 watch(() => route.path, () => {
   atualizarStatusSessao();
   menuAtivo.value = false;
 });
 
-onMounted(atualizarStatusSessao);
-
 const iniciarLogin = () => loginNoBling();
 
-const logout = () => {
-  localStorage.removeItem('bling_access_token');
-  localStorage.removeItem('bling_token_expires');
-  sessionStorage.removeItem('ultimo_estado_filtro');
-  token.value = false;
-  router.push('/');
+const logout = async () => {
+  try {
+    // 1. Avisa o PHP para deletar o cookie
+    await fetch('http://localhost:88/api/auth/logout', { 
+      method: 'POST',
+      credentials: 'include'
+    });
+  } catch (e) {
+    console.error("Erro ao avisar servidor do logout:", e);
+  } finally {
+    // 2. Limpa o front independente do sucesso da rede
+    limparSessaoLocal();
+    router.push('/');
+  }
 };
 </script>
 
