@@ -41,7 +41,7 @@ class Venda extends Model
 
         $colunasPermitidas = ['dataVenda', 'totalComDesconto', 'nomeCliente'];
         $colunaOrdem = in_array($filtros['ordem'] ?? '', $colunasPermitidas) ? $filtros['ordem'] : 'dataVenda';
-        
+
         $limite = 10;
         $offset = ((int)($filtros['pagina'] ?? 1) - 1) * $limite;
         $limiteParaCheck = $limite + 1;
@@ -97,10 +97,10 @@ class Venda extends Model
         }
 
         $percentualDesconto = (float)($dadosVenda['percentualDesconto'] ?? 0);
-        
+
         // Garante que o desconto esteja entre 0 e 100%
         $percentualDesconto = max(0, min(100, $percentualDesconto));
-        
+
         $valorDesconto = $subtotal * ($percentualDesconto / 100);
         $totalComDesconto = $subtotal - $valorDesconto;
 
@@ -149,7 +149,7 @@ class Venda extends Model
             foreach ($itens as $item) {
                 $qtd = (int)$item['quantidade'];
                 $preco = (float)$item['precoUnitario'];
-                
+
                 $stmtItem->execute([
                     ':venda_id' => $vendaId,
                     ':prod_id'  => $item['produto_id'],
@@ -231,13 +231,40 @@ class Venda extends Model
     }
 
     /**
-     * Exclui uma venda. 
-     * Nota: No banco de dados, certifique-se que a FK de itens está com ON DELETE CASCADE.
+     * Otimizar Exclusão & Exclusão em Lote via Código (Sem ON DELETE CASCADE)
+     * Remove os itens e as vendas controlando a consistência por transação.
+     * * @param array $ids Vetor com os IDs das vendas a serem excluídas.
+     * @return bool
+     * @throws \Exception
      */
-    public function excluirVendaCompleta($id)
+    public function excluirVendasEmLote(array $ids)
     {
-        $sql = "DELETE FROM vendas WHERE id = :id";
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([':id' => $id]);
+        if (empty($ids)) {
+            throw new \Exception("Nenhum ID fornecido para exclusão.");
+        }
+
+        // Cria uma string de placeholders (?, ?, ?) conforme a quantidade de IDs
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+        $this->db->beginTransaction();
+
+        try {
+            // 1. Remove os itens das vendas primeiro (Gestão de consistência via código)
+            $sqlItens = "DELETE FROM vendas_itens WHERE venda_id IN ($placeholders)";
+            $stmtItens = $this->db->prepare($sqlItens);
+            $stmtItens->execute($ids);
+
+            // 2. Remove as vendas em si
+            $sqlVendas = "DELETE FROM vendas WHERE id IN ($placeholders)";
+            $stmtVendas = $this->db->prepare($sqlVendas);
+            $stmtVendas = $this->db->prepare($sqlVendas);
+            $stmtVendas->execute($ids);
+
+            $this->db->commit();
+            return true;
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            throw new \Exception("Erro ao processar exclusão em lote: " . $e->getMessage());
+        }
     }
 }

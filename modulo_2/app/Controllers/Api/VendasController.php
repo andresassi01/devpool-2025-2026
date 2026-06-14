@@ -114,7 +114,7 @@ class VendasController extends Controller
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $dados = json_decode($response, true);
-        
+
         if ($httpCode === 200) {
             $formatados = array_map(fn($item) => [
                 'id' => $item['id'],
@@ -153,20 +153,39 @@ class VendasController extends Controller
     }
 
     /**
-     * Remove uma venda e seus itens associados.
+     * Remove uma ou mais vendas e seus itens associados.
+     * Suporta exclusão individual ou em lote.
      * * @return jsonResponse
      */
     public function destroy()
     {
-        $id = $_GET['id'] ?? null;
-        if (!$id) return $this->jsonResponse(null, 'ID não encontrado', 400);
-
         try {
+            $ids = [];
+
+            // Verifica se os IDs vieram no corpo da requisição (JSON para exclusão em lote)
+            $data = $this->getRequestData();
+            if (!empty($data['ids']) && is_array($data['ids'])) {
+                $ids = array_map('intval', $data['ids']);
+            }
+            // Caso contrário, tenta capturar um único ID da URL/Query String
+            else {
+                $idUnico = $_GET['id'] ?? null;
+                if ($idUnico) {
+                    $ids[] = (int)$idUnico;
+                }
+            }
+
+            if (empty($ids)) {
+                return $this->jsonResponse(null, 'Nenhum ID encontrado para exclusão.', 400);
+            }
+
             $model = new Venda();
-            $model->excluirVendaCompleta($id);
-            return $this->jsonResponse(null, 'Venda removida com sucesso!', 200);
+            $model->excluirVendasEmLote($ids);
+
+            $mensagem = count($ids) > 1 ? 'Vendas removidas com sucesso!' : 'Venda removida com sucesso!';
+            return $this->jsonResponse(null, $mensagem, 200);
         } catch (\Exception $e) {
-            return $this->jsonResponse(null, 'Erro no banco: ' . $e->getMessage(), 500);
+            return $this->jsonResponse(null, 'Erro ao processar exclusão: ' . $e->getMessage(), 500);
         }
     }
 
