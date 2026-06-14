@@ -20,6 +20,67 @@ class Venda extends Model
     }
 
     /**
+     * Busca vendas de forma paginada aplicando os filtros enviados do Controller.
+     * Atende à solicitação da banca de mover lógica de query para o Model.
+     */
+    public function listarVendasPaginadas(array $filtros)
+    {
+        $sql = "SELECT id, numero, nomeCliente, dataVenda, totalComDesconto, situacao FROM vendas WHERE 1=1";
+        $params = [];
+
+        if (!empty($filtros['cliente'])) {
+            $sql .= " AND nomeCliente LIKE :cliente";
+            $params['cliente'] = "%" . $filtros['cliente'] . "%";
+        }
+
+        if (!empty($filtros['dataInicio']) && !empty($filtros['dataFim'])) {
+            $sql .= " AND dataVenda BETWEEN :inicio AND :fim";
+            $params['inicio'] = $filtros['dataInicio'];
+            $params['fim'] = $filtros['dataFim'];
+        }
+
+        $colunasPermitidas = ['dataVenda', 'totalComDesconto', 'nomeCliente'];
+        $colunaOrdem = in_array($filtros['ordem'] ?? '', $colunasPermitidas) ? $filtros['ordem'] : 'dataVenda';
+        
+        $limite = 10;
+        $offset = ((int)($filtros['pagina'] ?? 1) - 1) * $limite;
+        $limiteParaCheck = $limite + 1;
+
+        $sql .= " ORDER BY $colunaOrdem DESC, id DESC LIMIT $limiteParaCheck OFFSET $offset";
+
+        $vendas = $this->query($sql, $params);
+
+        $temMais = count($vendas) > $limite;
+        if ($temMais) {
+            array_pop($vendas);
+        }
+
+        return [
+            'data' => $vendas,
+            'temMais' => $temMais,
+            'pagina' => $filtros['pagina'] ?? 1
+        ];
+    }
+
+    /**
+     * Retorna uma venda específica unificada com seus itens do banco de dados.
+     */
+    public function buscarPorIdComItens($id)
+    {
+        $venda = $this->query("SELECT * FROM vendas WHERE id = :id", ['id' => $id]);
+        if (empty($venda)) {
+            return null;
+        }
+
+        $itens = $this->query("SELECT * FROM vendas_itens WHERE venda_id = :id", ['id' => $id]);
+
+        return [
+            'venda' => $venda[0],
+            'itens' => $itens
+        ];
+    }
+
+    /**
      * RN14 e RN19: Recalcula todos os valores no servidor.
      * Nunca confiamos apenas no cálculo feito pelo JavaScript/Frontend.
      * * @param array $dadosVenda Cabecalho da venda com o percentual de desconto.
