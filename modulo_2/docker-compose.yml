@@ -12,6 +12,8 @@ services:
       - .docker/config/php/php.ini:/usr/local/etc/php/php.ini
       - .docker/config/vhosts:/etc/apache2/sites-enabled
       - .docker/logs/apache2:/var/log/apache2
+    env_file:
+      - .env    
     command: >
       bash -c "
         a2enmod rewrite &&
