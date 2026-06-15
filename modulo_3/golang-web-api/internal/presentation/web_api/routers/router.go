@@ -11,12 +11,11 @@ import (
 )
 
 // APIRouter groups all route registration in one place.
-// In the corporate chassi this struct carries dozens of middlewares (auth, tracing,
-// i18n, error handling). Here we keep it minimal so the routing logic is clear.
 type APIRouter struct {
-	engine        *gin.Engine
-	healthHandler *handlers.HealthHandler
-	taskHandler   *handlers.TaskHandler
+	engine         *gin.Engine
+	healthHandler  *handlers.HealthHandler
+	taskHandler    *handlers.TaskHandler
+	clienteHandler *handlers.ClienteHandler // 1. Adicionado o handler de clientes
 }
 
 // NewRouter creates a new APIRouter.
@@ -24,11 +23,13 @@ func NewRouter(
 	engine *gin.Engine,
 	healthHandler *handlers.HealthHandler,
 	taskHandler *handlers.TaskHandler,
+	clienteHandler *handlers.ClienteHandler, // 2. Adicionado no construtor
 ) *APIRouter {
 	return &APIRouter{
-		engine:        engine,
-		healthHandler: healthHandler,
-		taskHandler:   taskHandler,
+		engine:         engine,
+		healthHandler:  healthHandler,
+		taskHandler:    taskHandler,
+		clienteHandler: clienteHandler, // 2. Inicializado aqui
 	}
 }
 
@@ -46,6 +47,9 @@ func (r *APIRouter) RegisterRoutes() *gin.Engine {
 
 	r.registerHealthRoutes(v1)
 	r.registerTaskRoutes(v1)
+
+	// 3. Chamando o mapeamento de rotas de clientes que criamos no cliente_routes.go
+	MapClienteRoutes(v1, r.clienteHandler)
 
 	return r.engine
 }

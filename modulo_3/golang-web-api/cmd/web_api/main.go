@@ -57,16 +57,19 @@ func main() {
 
 	// Infrastructure
 	taskRepo := repositories.NewTaskRepositoryMySQL(db)
+	clienteRepo := repositories.NewClienteRepositoryMysql(db)
 
 	// Application
 	taskService := services.NewTaskService(taskRepo)
+	clienteService := services.NewClienteService(clienteRepo)
 
 	// Presentation
 	healthHandler := handlers.NewHealthHandler(db)
 	taskHandler := handlers.NewTaskHandler(taskService)
+	clienteHandler := handlers.NewClienteHandler(clienteService)
 
 	engine := gin.Default()
-	router := routers.NewRouter(engine, healthHandler, taskHandler)
+	router := routers.NewRouter(engine, healthHandler, taskHandler, clienteHandler)
 	ginEngine := router.RegisterRoutes()
 
 	// ---- 5. HTTP server with graceful shutdown ----

@@ -9,14 +9,14 @@ import (
 // In a production chassi these would include dozens of fields (Kafka, Redis, Mongo, tracing, etc.).
 // Here we keep only what is needed: the app itself and one database.
 type Config struct {
-	AppName      string
-	Port         string
-	Environment  string
-	DBHost       string
-	DBPort       string
-	DBUser       string
-	DBPassword   string
-	DBName       string
+	AppName        string
+	Port           string
+	Environment    string
+	DBHost         string
+	DBPort         string
+	DBUser         string
+	DBPassword     string
+	DBName         string
 	DBMaxOpenConns int
 	DBMaxIdleConns int
 }
@@ -25,14 +25,14 @@ type Config struct {
 // Every field uses a helper so missing vars never panic -- they just fall back to the default.
 func LoadConfig() *Config {
 	return &Config{
-		AppName:      getEnv("APP_NAME", "devpool-base-web-api"),
-		Port:         getEnv("API_PORT", "8080"),
-		Environment:  getEnv("ENV", "development"),
-		DBHost:       getEnv("DB_HOST", "localhost"),
-		DBPort:       getEnv("DB_PORT", "3306"),
-		DBUser:       getEnv("DB_USER", "devpool"),
-		DBPassword:   getEnv("DB_PASSWORD", "devpool123"),
-		DBName:       getEnv("DB_NAME", "devpool"),
+		AppName:        getEnv("APP_NAME", "devpool-base-web-api"),
+		Port:           getEnv("API_PORT", "8080"),
+		Environment:    getEnv("ENV", "development"),
+		DBHost:         getEnv("DB_HOST", "localhost"),
+		DBPort:         getEnv("DB_PORT", "3308"),
+		DBUser:         getEnv("DB_USER", "devpool"),
+		DBPassword:     getEnv("DB_PASSWORD", "devpool123"),
+		DBName:         getEnv("DB_NAME", "devpool"),
 		DBMaxOpenConns: getEnvInt("DB_MAX_OPEN_CONNS", 10),
 		DBMaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 5),
 	}
