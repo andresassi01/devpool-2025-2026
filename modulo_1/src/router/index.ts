@@ -50,9 +50,23 @@ const routes = [
   {
     path: '/vendas/editar/:id',
     name: 'vendaeditar',
-    component: VendaForm, 
-    props: true, 
+    component: VendaForm,
+    props: true,
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/clientes',
+    component: () => import('../views/Clientes.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/clientes/novo',
+    component: () => import('../components/ClienteForm.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/clientes/editar/:id',
+    component: () => import('../components/ClienteForm.vue')
   }
 ]
 
