@@ -19,6 +19,7 @@ import (
 	"github.com/bling-lwsa/devpool-base-web-api/internal/infrastructure/mysql/repositories"
 	"github.com/bling-lwsa/devpool-base-web-api/internal/presentation/web_api/handlers"
 	"github.com/bling-lwsa/devpool-base-web-api/internal/presentation/web_api/routers"
+	"github.com/gin-contrib/cors"
 )
 
 // @title           devpool-base-web-api
@@ -69,6 +70,7 @@ func main() {
 	clienteHandler := handlers.NewClienteHandler(clienteService)
 
 	engine := gin.Default()
+	engine.Use(cors.Default())
 	router := routers.NewRouter(engine, healthHandler, taskHandler, clienteHandler)
 	ginEngine := router.RegisterRoutes()
 

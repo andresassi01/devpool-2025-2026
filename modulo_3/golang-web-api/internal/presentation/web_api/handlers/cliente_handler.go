@@ -20,7 +20,7 @@ func NewClienteHandler(service interfaces.ClienteServiceInterface) *ClienteHandl
 	return &ClienteHandler{service: service}
 }
 
-// Create lida com a criação de um novo cliente (POST /v1/clientes).
+// Create lida com a criação de um novo cliente
 func (h *ClienteHandler) Create(c *gin.Context) {
 	var input messages.CreateClienteInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -37,7 +37,7 @@ func (h *ClienteHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, output)
 }
 
-// GetByID busca um cliente específico pelo ID (GET /v1/clientes/:id).
+// GetByID busca um cliente específico pelo ID
 func (h *ClienteHandler) GetByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -60,7 +60,7 @@ func (h *ClienteHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, output)
 }
 
-// List retorna a lista paginada e filtrada de clientes (GET /v1/clientes).
+// List retorna a lista paginada e filtrada de clientes
 func (h *ClienteHandler) List(c *gin.Context) {
 	filtroNome := c.Query("q")
 	if filtroNome == "" {
@@ -82,7 +82,7 @@ func (h *ClienteHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, output)
 }
 
-// Update atualiza um cliente existente (PUT /v1/clientes/:id).
+// Update atualiza um cliente existente
 func (h *ClienteHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -106,7 +106,7 @@ func (h *ClienteHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, output)
 }
 
-// Delete remove um cliente (DELETE /v1/clientes/:id).
+// Delete remove um cliente
 func (h *ClienteHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -121,6 +121,6 @@ func (h *ClienteHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// De acordo com o diagrama visual da banca, o retorno do DELETE deve ser 204 No Content
+	// retorno do DELETE 204 No Content
 	c.Status(http.StatusNoContent)
 }

@@ -11,7 +11,6 @@ type Cliente struct {
 	Nome string `json:"nome"`
 }
 
-// Validar verifica as regras de negócio do cliente exigidas pela banca.
 func (c *Cliente) Validar() error {
 	c.Nome = strings.TrimSpace(c.Nome)
 
@@ -19,7 +18,6 @@ func (c *Cliente) Validar() error {
 		return errors.New("o nome do cliente é obrigatório")
 	}
 
-	// Requisito do diagrama do banco de dados
 	if len(c.Nome) > 255 {
 		return errors.New("o nome do cliente não pode exceder 255 caracteres")
 	}

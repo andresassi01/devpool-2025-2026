@@ -7,25 +7,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-USE `devpool_erp`;
+USE `devpool`;
 
--- Cria a tabela nova de clientes separada
-CREATE TABLE IF NOT EXISTS `clientes` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `nome` VARCHAR(512) NOT NULL 
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Modifica a tabela de vendas antiga 
--- Adiciona a nova coluna de vínculo (idCliente)
-ALTER TABLE `vendas` 
-ADD COLUMN `idCliente` INT NOT NULL AFTER `id`;
-
--- Cria a restrição de Chave Estrangeira (FK) para garantir a integridade
-ALTER TABLE `vendas`
-ADD CONSTRAINT `fk_vendas_cliente`
-FOREIGN KEY (`idCliente`) REFERENCES `clientes`(`id`)
-ON DELETE RESTRICT;
-
--- Remove o campo 'nomeCliente'
-ALTER TABLE `vendas` 
-DROP COLUMN `nomeCliente`;
+CREATE TABLE IF NOT EXISTS clientes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nome VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
