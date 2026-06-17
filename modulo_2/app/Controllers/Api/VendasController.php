@@ -22,23 +22,16 @@ class VendasController extends Controller
 
     /**
      * Lista as vendas com filtros de cliente, período e ordenação.
-     * Implementa paginação lógica para o Frontend.
+     * Implementa paginação lógica delegando a busca ao Model.
      * * @return jsonResponse
      */
     public function index()
     {
         try {
-            $cliente = $_GET['cliente'] ?? null;
             $dataInicio = $_GET['dataInicio'] ?? null;
             $dataFim = $_GET['dataFim'] ?? null;
-            $ordem = $_GET['ordem'] ?? 'dataVenda';
 
-            $pagina = isset($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
-            $limite = 10;
-            $offset = ($pagina - 1) * $limite;
-            $limiteParaCheck = $limite + 1;
-
-            // Validação de consistência de datas
+            // Validação de consistência de datas (Regra de Request mantida no Controller)
             if (($dataInicio && !$dataFim) || (!$dataInicio && $dataFim)) {
                 return $this->jsonResponse(null, 'Informe o período completo (Início e Fim).', 400);
             }
@@ -46,35 +39,19 @@ class VendasController extends Controller
                 return $this->jsonResponse(null, 'A data inicial não pode ser maior que a final.', 400);
             }
 
-            $sql = "SELECT id, numero, nomeCliente, dataVenda, totalComDesconto, situacao FROM vendas WHERE 1=1";
-            $params = [];
+            // Agrupa os filtros para passar ao Model
+            $filtros = [
+                'cliente'    => $_GET['cliente'] ?? null,
+                'dataInicio' => $dataInicio,
+                'dataFim'    => $dataFim,
+                'ordem'      => $_GET['ordem'] ?? 'dataVenda',
+                'pagina'     => isset($_GET['pagina']) ? (int)$_GET['pagina'] : 1
+            ];
 
-            if ($cliente) {
-                $sql .= " AND nomeCliente LIKE :cliente";
-                $params['cliente'] = "%$cliente%";
-            }
+            $vendaModel = new Venda();
+            $resultado = $vendaModel->listarVendasPaginadas($filtros);
 
-            if ($dataInicio && $dataFim) {
-                $sql .= " AND dataVenda BETWEEN :inicio AND :fim";
-                $params['inicio'] = $dataInicio;
-                $params['fim'] = $dataFim;
-            }
-
-            $colunasPermitidas = ['dataVenda', 'totalComDesconto', 'nomeCliente'];
-            $colunaOrdem = in_array($ordem, $colunasPermitidas) ? $ordem : 'dataVenda';
-            $sql .= " ORDER BY $colunaOrdem DESC, id DESC LIMIT $limiteParaCheck OFFSET $offset";
-
-            $db = new Venda();
-            $vendas = $db->query($sql, $params);
-
-            $temMais = count($vendas) > $limite;
-            if ($temMais) array_pop($vendas);
-
-            return $this->jsonResponse([
-                'data' => $vendas,
-                'temMais' => $temMais,
-                'pagina' => $pagina
-            ], 'Sucesso');
+            return $this->jsonResponse($resultado, 'Sucesso');
         } catch (\Exception $e) {
             return $this->jsonResponse(null, 'Erro ao buscar vendas: ' . $e->getMessage(), 500);
         }
@@ -137,7 +114,7 @@ class VendasController extends Controller
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $dados = json_decode($response, true);
-       
+
         if ($httpCode === 200) {
             $formatados = array_map(fn($item) => [
                 'id' => $item['id'],
@@ -154,7 +131,7 @@ class VendasController extends Controller
     /**
      * Exibe detalhes de uma venda específica e seus itens.
      * * @param int|null $id
-     * @return jsonResponse
+     * * @return jsonResponse
      */
     public function show($id = null)
     {
@@ -163,36 +140,52 @@ class VendasController extends Controller
             if (!$id) return $this->jsonResponse(null, 'ID não fornecido', 400);
 
             $vendaModel = new Venda();
-            $venda = $vendaModel->query("SELECT * FROM vendas WHERE id = :id", ['id' => $id]);
+            $dadosVendaCompleta = $vendaModel->buscarPorIdComItens($id);
 
-            if (!$venda) return $this->jsonResponse(null, 'Venda não encontrada', 404);
+            if (!$dadosVendaCompleta) {
+                return $this->jsonResponse(null, 'Venda não encontrada', 404);
+            }
 
-            $itens = $vendaModel->query("SELECT * FROM vendas_itens WHERE venda_id = :id", ['id' => $id]);
-
-            return $this->jsonResponse([
-                'venda' => $venda[0],
-                'itens' => $itens
-            ], 'Sucesso');
+            return $this->jsonResponse($dadosVendaCompleta, 'Sucesso');
         } catch (\Exception $e) {
             return $this->jsonResponse(null, 'Erro: ' . $e->getMessage(), 500);
         }
     }
 
     /**
-     * Remove uma venda e seus itens associados.
+     * Remove uma ou mais vendas e seus itens associados.
+     * Suporta exclusão individual ou em lote.
      * * @return jsonResponse
      */
     public function destroy()
     {
-        $id = $_GET['id'] ?? null;
-        if (!$id) return $this->jsonResponse(null, 'ID não encontrado', 400);
-
         try {
+            $ids = [];
+
+            // Verifica se os IDs vieram no corpo da requisição (JSON para exclusão em lote)
+            $data = $this->getRequestData();
+            if (!empty($data['ids']) && is_array($data['ids'])) {
+                $ids = array_map('intval', $data['ids']);
+            }
+            // Caso contrário, tenta capturar um único ID da URL/Query String
+            else {
+                $idUnico = $_GET['id'] ?? null;
+                if ($idUnico) {
+                    $ids[] = (int)$idUnico;
+                }
+            }
+
+            if (empty($ids)) {
+                return $this->jsonResponse(null, 'Nenhum ID encontrado para exclusão.', 400);
+            }
+
             $model = new Venda();
-            $model->excluirVendaCompleta($id);
-            return $this->jsonResponse(null, 'Venda removida com sucesso!', 200);
+            $model->excluirVendasEmLote($ids);
+
+            $mensagem = count($ids) > 1 ? 'Vendas removidas com sucesso!' : 'Venda removida com sucesso!';
+            return $this->jsonResponse(null, $mensagem, 200);
         } catch (\Exception $e) {
-            return $this->jsonResponse(null, 'Erro no banco: ' . $e->getMessage(), 500);
+            return $this->jsonResponse(null, 'Erro ao processar exclusão: ' . $e->getMessage(), 500);
         }
     }
 
@@ -218,7 +211,7 @@ class VendasController extends Controller
             ];
 
             $vendaModel->atualizarVenda($id, $dadosVenda, $data['itens']);
-            return $this->jsonResponse(['id' => $id], 'Venda atualizada com sucesso!');
+            return $this->jsonResponse(['id' => $id], 'Venda updated com sucesso!');
         } catch (\Exception $e) {
             return $this->jsonResponse([], 'Erro ao atualizar: ' . $e->getMessage(), 500);
         }

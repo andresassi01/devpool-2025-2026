@@ -68,3 +68,12 @@ VALUES
 INSERT INTO `devpool_erp`.`vendas_itens` (`venda_id`, `produto_id`, `nomeProduto`, `quantidade`, `precoUnitario`, `totalItem`)
 VALUES 
 (1, 12345678, 'Produto Exemplo A', 2, 100.00, 200.00);
+
+-- 1. Remove a chave estrangeira antiga que fazia a exclusão automática
+ALTER TABLE `vendas_itens` DROP FOREIGN KEY `fk_venda`;
+
+-- 2. Recria a chave estrangeira exigindo que o PHP gerencie a consistência (RESTRICT)
+ALTER TABLE `vendas_itens` 
+ADD CONSTRAINT `fk_venda` 
+FOREIGN KEY (`venda_id`) REFERENCES `vendas`(`id`) 
+ON DELETE RESTRICT;

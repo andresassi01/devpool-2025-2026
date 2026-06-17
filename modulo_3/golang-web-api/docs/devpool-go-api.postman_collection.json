@@ -1,0 +1,273 @@
+{
+	"info": {
+		"_postman_id": "devpool-go-api-collection",
+		"name": "Devpool Go API",
+		"description": "Collection para demonstrar o funcionamento da API Go do projeto devpool-base-web-api.\n\nEndpoints de Tasks (CRUD) e Health checks.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080/v1",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health",
+			"description": "Endpoints de verificacao de saude da aplicacao.",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["health"]
+						},
+						"description": "Verifica a saude geral da aplicacao e da conexao com o banco de dados MySQL."
+					},
+					"response": [
+						{
+							"name": "Healthy",
+							"status": "OK",
+							"code": 200,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "{\n  \"status\": \"healthy\",\n  \"checks\": {\n    \"mysql\": \"healthy\"\n  }\n}"
+						},
+						{
+							"name": "Unhealthy",
+							"status": "Service Unavailable",
+							"code": 503,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "{\n  \"status\": \"unhealthy\",\n  \"checks\": {\n    \"mysql\": \"unhealthy\"\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Liveness Probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/livez",
+							"host": ["{{baseUrl}}"],
+							"path": ["livez"]
+						},
+						"description": "Retorna 200 se o processo esta vivo. Usado pelo Kubernetes para decidir se reinicia o container."
+					},
+					"response": [
+						{
+							"name": "Alive",
+							"status": "OK",
+							"code": 200,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "{\n  \"status\": \"alive\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Readiness Probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/readyz",
+							"host": ["{{baseUrl}}"],
+							"path": ["readyz"]
+						},
+						"description": "Verifica se a aplicacao esta pronta para receber trafego (conexao com banco OK)."
+					},
+					"response": [
+						{
+							"name": "Ready",
+							"status": "OK",
+							"code": 200,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "{\n  \"status\": \"ready\"\n}"
+						},
+						{
+							"name": "Not Ready",
+							"status": "Service Unavailable",
+							"code": 503,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "{\n  \"status\": \"not ready\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Tasks",
+			"description": "CRUD de tasks.",
+			"item": [
+				{
+					"name": "Criar Task",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status 201 Created', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Retorna task com ID', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.id).to.be.a('number');",
+									"    pm.expect(json.title).to.eql(pm.iterationData.get('title') || 'Estudar Go');",
+									"    pm.expect(json.status).to.eql('pending');",
+									"});",
+									"",
+									"if (pm.response.code === 201) {",
+									"    pm.collectionVariables.set('taskId', pm.response.json().id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Estudar Go\",\n  \"description\": \"Completar o tour of Go\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tasks",
+							"host": ["{{baseUrl}}"],
+							"path": ["tasks"]
+						},
+						"description": "Cria uma nova task com titulo e descricao opcional. Status inicial: \"pending\"."
+					},
+					"response": [
+						{
+							"name": "Task Criada",
+							"status": "Created",
+							"code": 201,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "{\n  \"id\": 1,\n  \"title\": \"Estudar Go\",\n  \"description\": \"Completar o tour of Go\",\n  \"status\": \"pending\",\n  \"created_at\": \"2026-04-23T10:00:00Z\",\n  \"updated_at\": \"2026-04-23T10:00:00Z\"\n}"
+						},
+						{
+							"name": "Bad Request - titulo ausente",
+							"status": "Bad Request",
+							"code": 400,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "{\n  \"error\": \"Key: 'CreateTaskRequest.Title' Error:Field validation for 'Title' failed on the 'required' tag\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Criar Task (sem descricao)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Revisar codigo\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tasks",
+							"host": ["{{baseUrl}}"],
+							"path": ["tasks"]
+						},
+						"description": "Cria task apenas com titulo, sem descricao (campo opcional)."
+					},
+					"response": [
+						{
+							"name": "Task Criada",
+							"status": "Created",
+							"code": 201,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "{\n  \"id\": 2,\n  \"title\": \"Revisar codigo\",\n  \"description\": \"\",\n  \"status\": \"pending\",\n  \"created_at\": \"2026-04-23T10:01:00Z\",\n  \"updated_at\": \"2026-04-23T10:01:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Criar Task (erro - titulo vazio)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"description\": \"Sem titulo\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tasks",
+							"host": ["{{baseUrl}}"],
+							"path": ["tasks"]
+						},
+						"description": "Tenta criar task sem titulo -- deve retornar 400 Bad Request."
+					},
+					"response": [
+						{
+							"name": "Bad Request",
+							"status": "Bad Request",
+							"code": 400,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "{\n  \"error\": \"Key: 'CreateTaskRequest.Title' Error:Field validation for 'Title' failed on the 'required' tag\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Listar Tasks",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Retorna array de tasks', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.be.an('array');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tasks",
+							"host": ["{{baseUrl}}"],
+							"path": ["tasks"]
+						},
+						"description": "Retorna todas as tasks cadastradas."
+					},
+					"response": [
+						{
+							"name": "Lista de Tasks",
+							"status": "OK",
+							"code": 200,
+							"header": [{"key": "Content-Type", "value": "application/json"}],
+							"body": "[\n  {\n    \"id\": 1,\n    \"title\": \"Estudar Go\",\n    \"description\": \"Completar o tour of Go\",\n    \"status\": \"pending\",\n    \"created_at\": \"2026-04-23T10:00:00Z\",\n    \"updated_at\": \"2026-04-23T10:00:00Z\"\n  },\n  {\n    \"id\": 2,\n    \"title\": \"Revisar codigo\",\n    \"description\": \"\",\n    \"status\": \"pending\",\n    \"created_at\": \"2026-04-23T10:01:00Z\",\n    \"updated_at\": \"2026-04-23T10:01:00Z\"\n  }\n]"
+						}
+					]
+				}
+			]
+		}
+	]
+}

@@ -57,50 +57,41 @@ export function useProdutos() {
         erro.value = false;
         dropdownAberto.value = null;
 
-        const token = localStorage.getItem('bling_access_token');
-        if (!token) {
-            router.push('/');
-            return;
-        }
-
         try {
-            const params = new URLSearchParams({
+            // Sincronização exata dos nomes com o seu ProdutosController.php
+            const queryParams = new URLSearchParams({
                 pagina: pagina.value.toString(),
-                limite: LIMITE_POR_PAGINA.toString()
+                limite: LIMITE_POR_PAGINA.toString(),
+                nome: filtrosAtivos.nome,
+                sku: filtrosAtivos.sku,         // No PHP: $_GET['sku']
+                situacao: filtrosAtivos.situacao,   // No PHP: $_GET['situacao']
+                dataInicio: filtrosAtivos.dataInicio, // No PHP: $_GET['dataInicio']
+                dataFim: filtrosAtivos.dataFim        // No PHP: $_GET['dataFim']
             });
 
-            if (filtrosAtivos.nome) params.append('nome', filtrosAtivos.nome);
-            if (filtrosAtivos.sku) params.append('codigo', filtrosAtivos.sku);
-            if (filtrosAtivos.situacao) params.append('criterio', filtrosAtivos.situacao);
-            if (filtrosAtivos.dataInicio) params.append('dataAlteracaoInicial', filtrosAtivos.dataInicio);
-            if (filtrosAtivos.dataFim) params.append('dataAlteracaoFinal', filtrosAtivos.dataFim);
-
-            const resposta = await fetch(`/Api/v3/produtos?${params.toString()}`, {
+            const resposta = await fetch('http://localhost:88/index.php/api/produtos?' + queryParams.toString(), {
                 method: 'GET',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Accept': 'application/json' },
+                credentials: 'include'
             });
-
             const dados = await resposta.json();
 
             if (resposta.ok) {
+                // Atualiza a lista que vai para o ListagemProdutos.vue
                 produtos.value = dados.data || [];
                 temMaisPaginas.value = produtos.value.length === LIMITE_POR_PAGINA;
             } else if (resposta.status === 401) {
-                localStorage.removeItem('bling_access_token');
                 router.push('/');
-            } else if (resposta.status === 404) {
-                produtos.value = [];
-                temMaisPaginas.value = false;
             } else {
-                throw new Error(dados.error?.description || 'Erro ao buscar produtos');
+                throw new Error(dados.message || 'Erro ao buscar produtos');
             }
         } catch (err: any) {
             erro.value = true;
-            mensagemErro.value = err.message;
+            console.error("Erro na busca:", err.message);
             produtos.value = [];
-            temMaisPaginas.value = false;
         } finally {
             carregando.value = false;
+            // Salva o estado para quando você voltar de uma edição
             sessionStorage.setItem('ultimo_estado_filtro', JSON.stringify({
                 filtros: filtrosAtivos,
                 pagina: pagina.value
@@ -108,19 +99,66 @@ export function useProdutos() {
         }
     };
 
+    const executarAlteracaoSituacao = async (id: number | null, novaSituacao: 'A' | 'E', emMassa = false) => {
+        carregando.value = true;
+        const ids = emMassa ? [...produtosSelecionados.value] : [id];
+
+        try {
+            const token = localStorage.getItem('bling_access_token');
+
+            const promises = ids.map(idAtual =>
+                fetch(`https://www.bling.com.br/Api/v3/produtos/${idAtual}/situacoes`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ situacao: novaSituacao })
+                })
+            );
+
+            await Promise.allSettled(promises);
+
+            tipoFeedback.value = 'sucesso';
+            mensagemFeedback.value = novaSituacao === 'A' ? 'Produto(s) restaurado(s)!' : 'Produto(s) excluído(s)!';
+            mostrarFeedback.value = true;
+
+            modalAtivo.value = false;
+            produtosSelecionados.value = [];
+
+            produtos.value = produtos.value.filter(p => !ids.includes(p.id));
+            await buscarProdutos();
+
+            setTimeout(() => { mostrarFeedback.value = false; }, 3000);
+        } catch (err: any) {
+            erro.value = true;
+            mensagemErro.value = "Erro na operação: " + err.message;
+        } finally {
+            carregando.value = false;
+        }
+    };
+
 
     const handlePesquisa = (novosFiltros: any) => {
+        // Mescla os filtros do componente filho para o estado global do composable
         Object.assign(filtrosAtivos, novosFiltros);
-        pagina.value = 1;
-        produtosSelecionados.value = [];
-        buscarProdutos();
+        pagina.value = 1; // Reseta página
+        produtosSelecionados.value = []; // Limpa seleção
+        buscarProdutos(); // Chama o PHP
     };
 
     const handleLimpar = () => {
+        // 1. Volta os filtros para o estado inicial (vazio)
         Object.assign(filtrosAtivos, filtrosIniciais);
+
+        // 2. Reseta paginação e seleção
         pagina.value = 1;
         produtosSelecionados.value = [];
+
+        // 3. Limpa o cache da sessão para não voltar o filtro ao dar F5
         sessionStorage.removeItem('ultimo_estado_filtro');
+
+        // 4. ESSENCIAL: Busca a lista limpa do servidor
         buscarProdutos();
     };
 
@@ -128,6 +166,7 @@ export function useProdutos() {
         if (novaPagina < 1 || (novaPagina > pagina.value && !temMaisPaginas.value)) return;
         pagina.value = novaPagina;
         produtosSelecionados.value = [];
+        // 5. Busca os dados da nova página mantendo os filtros ativos
         buscarProdutos();
     };
 
@@ -155,41 +194,6 @@ export function useProdutos() {
         modalAtivo.value = false;
         idParaExcluir.value = null;
         isMassa.value = false;
-    };
-
-    const executarAlteracaoSituacao = async (id: number | null, novaSituacao: 'A' | 'E', emMassa = false) => {
-        const token = localStorage.getItem('bling_access_token');
-        carregando.value = true;
-        const ids = emMassa ? [...produtosSelecionados.value] : [id];
-
-        try {
-            const promises = ids.map(idAtual =>
-                fetch(`/Api/v3/produtos/${idAtual}/situacoes`, {
-                    method: 'PATCH',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ situacao: novaSituacao })
-                })
-            );
-
-            await Promise.allSettled(promises);
-
-            tipoFeedback.value = 'sucesso';
-            mensagemFeedback.value = novaSituacao === 'A' ? 'Produto(s) restaurado(s)!' : 'Produto(s) excluído(s)!';
-            mostrarFeedback.value = true;
-
-            modalAtivo.value = false;
-            produtosSelecionados.value = [];
-            produtos.value = produtos.value.filter(p => !ids.includes(p.id));
-            await buscarProdutos(); 
-
-
-            setTimeout(() => { mostrarFeedback.value = false; }, 3000);
-        } catch (err: any) {
-            erro.value = true;
-            mensagemErro.value = "Erro na operação: " + err.message;
-        } finally {
-            carregando.value = false;
-        }
     };
 
     const prepararExclusaoIndividual = (id: number) => {
@@ -224,7 +228,6 @@ export function useProdutos() {
         const situacao = tipoAcao.value === 'restaurar' ? 'A' : 'E';
         executarAlteracaoSituacao(idParaExcluir.value, situacao, isMassa.value);
     };
-
 
     return {
         produtos, carregando, erro, mensagemErro, pagina, temMaisPaginas,

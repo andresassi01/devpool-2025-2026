@@ -19,7 +19,8 @@
       </div>
     </div>
 
-    <div class="columns mb-0"> <div class="column is-3">
+    <div class="columns mb-0">
+      <div class="column is-3">
         <div class="field">
           <label class="label">Data Alteração (Início)</label>
           <div class="control">
@@ -40,7 +41,7 @@
           <label class="label">Critério / Situação</label>
           <div class="control">
             <div class="select is-fullwidth">
-              <select v-model="filtros.situacao">
+              <select v-model="filtros.situacao" @change="emitirPesquisa">
                 <option value="1">Últimos incluídos</option>
                 <option value="2">Ativos</option>
                 <option value="3">Inativos</option>
@@ -75,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch, ref } from 'vue';
+import { reactive, watch, ref, toRaw } from 'vue';
 
 const props = defineProps({
   isLoading: Boolean,
@@ -122,7 +123,8 @@ const validarDatas = () => {
 
 const emitirPesquisa = () => {
   if (validarDatas()) {
-    emit('pesquisar', { ...filtros });
+    const payload = { ...toRaw(filtros) };
+    emit('pesquisar', payload);
   }
 };
 
