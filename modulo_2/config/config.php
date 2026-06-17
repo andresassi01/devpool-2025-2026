@@ -12,3 +12,8 @@ define('HTTP_METHOD_DELETE', 'DELETE');
 
 define('URL_BASE', 'http://localhost:88');
 define('MAINTENANCE', 0);
+
+// Credenciais do Aplicativo Bling (OAuth2)
+define('BLING_CLIENT_ID', '8b83f5e78848c75f558c581cf69aed1c93aed7f7');
+define('BLING_CLIENT_SECRET', '304eabc95c4f3b3ee855ee356d098739db66a32cafc088914cab7e15d83a');
+define('BLING_API_URL', 'https://www.bling.com.br/Api/v3');
